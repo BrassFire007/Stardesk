@@ -16,4 +16,4 @@ export interface Exam {
   rank?: number;
 }
 
-export type View = 'home' | 'homework' | 'timer' | 'exams';
+export type View = 'home' | 'homework' | 'timer' | 'exams' | 'profile';

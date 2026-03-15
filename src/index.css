@@ -6,8 +6,19 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
+@variant dark (&:where(.dark, .dark *));
+
 body {
-  @apply bg-[#F8F9FC] text-slate-900 antialiased;
+  @apply bg-[#F8F9FC] text-slate-900 antialiased transition-colors duration-500;
+}
+
+html.dark body {
+  @apply bg-slate-950 text-slate-100;
+}
+
+/* Global transition for smoother theme switching */
+*, *::before, *::after {
+  @apply transition-colors duration-500;
 }
 
 /* Custom scrollbar for a cleaner look */
@@ -20,5 +31,5 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-slate-200 rounded-full hover:bg-slate-300 transition-colors;
+  @apply bg-slate-200 dark:bg-slate-700 rounded-full hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors;
 }

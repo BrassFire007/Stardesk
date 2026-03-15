@@ -3,25 +3,74 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { App as CapacitorApp } from '@capacitor/app';
 import { 
   BookOpen, 
   Timer, 
   Trophy, 
   Home, 
+  User,
   ChevronLeft,
   GraduationCap,
-  Sparkles
+  Sparkles,
+  Moon,
+  Sun
 } from 'lucide-react';
 import HomeworkTracker from './components/HomeworkTracker';
 import PomodoroTimer from './components/PomodoroTimer';
 import ExamTracker from './components/ExamTracker';
+import UserProfile from './components/UserProfile';
 import { View } from './types';
+import { QUOTES } from './constants';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<View>('home');
   const [showQuote, setShowQuote] = useState(false);
+  const [dailyQuote, setDailyQuote] = useState('');
+  const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('stardesk_theme') === 'dark');
+
+  // Memoize theme toggle to prevent unnecessary re-renders of components that use it
+  const toggleTheme = React.useCallback(() => {
+    setIsDarkMode(prev => !prev);
+  }, []);
+
+  // Memoize view switching
+  const handleSetView = React.useCallback((view: View) => {
+    setCurrentView(view);
+  }, []);
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('stardesk_theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('stardesk_theme', 'light');
+    }
+  }, [isDarkMode]);
+
+  useEffect(() => {
+    // Pick a random quote on mount - only once
+    const randomIndex = Math.floor(Math.random() * QUOTES.length);
+    setDailyQuote(QUOTES[randomIndex]);
+  }, []); // Empty dependency array ensures this only runs on mount
+
+  useEffect(() => {
+    const backHandler = CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+      if (currentView !== 'home') {
+        setCurrentView('home');
+      } else {
+        // If we are on home, we can let the app close or handle exit logic
+        CapacitorApp.exitApp();
+      }
+    });
+
+    return () => {
+      backHandler.then(h => h.remove());
+    };
+  }, [currentView]);
 
   const renderView = () => {
     switch (currentView) {
@@ -31,11 +80,14 @@ export default function App() {
         return <PomodoroTimer />;
       case 'exams':
         return <ExamTracker />;
+      case 'profile':
+        return <UserProfile isDarkMode={isDarkMode} onToggleTheme={toggleTheme} />;
       default:
+        const userName = localStorage.getItem('stardesk_user_name') || 'Student';
         return (
           <div className="flex flex-col gap-4 p-4">
-            <div className="bg-indigo-600 rounded-3xl p-6 text-white shadow-lg mb-2">
-              <h3 className="text-2xl font-bold mb-1">Hello Student!</h3>
+            <div className="bg-indigo-600 dark:bg-indigo-700 rounded-3xl p-6 text-white shadow-lg mb-2">
+              <h3 className="text-2xl font-bold mb-1">Hello {userName}!</h3>
               <p className="text-indigo-100 text-sm">Ready to crush your goals today?</p>
             </div>
             
@@ -43,27 +95,27 @@ export default function App() {
               <MobileMenuCard 
                 title="Homework" 
                 icon={<BookOpen size={28} />}
-                color="bg-white text-indigo-600"
-                onClick={() => setCurrentView('homework')}
+                color="bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400"
+                onClick={() => handleSetView('homework')}
               />
               <MobileMenuCard 
                 title="Timer" 
                 icon={<Timer size={28} />}
-                color="bg-white text-emerald-600"
-                onClick={() => setCurrentView('timer')}
+                color="bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400"
+                onClick={() => handleSetView('timer')}
               />
             </div>
             
             <MobileMenuCard 
               title="Exam Performance" 
               icon={<Trophy size={28} />}
-              color="bg-white text-amber-600"
+              color="bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400"
               fullWidth
-              onClick={() => setCurrentView('exams')}
+              onClick={() => handleSetView('exams')}
             />
 
-            <div className="mt-4 p-4 bg-slate-100 rounded-2xl border border-dashed border-slate-300 text-center">
-              <p className="text-xs text-slate-500 italic">"The secret of getting ahead is getting started."</p>
+            <div className="mt-4 p-4 bg-slate-100 dark:bg-slate-800 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 text-center">
+              <p className="text-xs text-slate-500 dark:text-slate-400 italic">"{dailyQuote}"</p>
             </div>
           </div>
         );
@@ -71,9 +123,9 @@ export default function App() {
   };
 
   return (
-    <div className="flex justify-center bg-slate-200 min-h-screen">
+    <div className="flex justify-center bg-slate-200 min-h-screen transition-colors duration-300">
       {/* Mobile Container Emulator */}
-      <div className="w-full max-w-[450px] bg-[#F8F9FC] min-h-screen flex flex-col shadow-2xl relative overflow-hidden">
+      <div className={`w-full max-w-[450px] bg-[#F8F9FC] dark:bg-slate-900 h-screen flex flex-col shadow-2xl relative overflow-hidden transition-colors duration-300 ${isDarkMode ? 'dark' : ''}`}>
         
         {/* Quote Bottom Sheet */}
         <AnimatePresence>
@@ -91,25 +143,25 @@ export default function App() {
                 animate={{ y: 0 }}
                 exit={{ y: "100%" }}
                 transition={{ type: "spring", damping: 25, stiffness: 200 }}
-                className="relative bg-white pt-2 pb-10 px-8 rounded-t-[40px] shadow-2xl w-full max-w-[450px] text-center border-t border-slate-100"
+                className="relative bg-white dark:bg-slate-800 pt-2 pb-10 px-8 rounded-t-[40px] shadow-2xl w-full max-w-[450px] text-center border-t border-slate-100 dark:border-slate-700"
               >
                 {/* Drag Handle */}
-                <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mt-2 mb-8" />
+                <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mt-2 mb-8" />
                 
-                <div className="bg-indigo-50 w-20 h-20 rounded-[28px] flex items-center justify-center mx-auto mb-8 shadow-inner">
-                  <Sparkles className="text-indigo-600" size={40} />
+                <div className="bg-indigo-50 dark:bg-indigo-900/30 w-20 h-20 rounded-[28px] flex items-center justify-center mx-auto mb-8 shadow-inner">
+                  <Sparkles className="text-indigo-600 dark:text-indigo-400" size={40} />
                 </div>
                 
-                <blockquote className="text-2xl font-black text-slate-800 leading-tight mb-4 px-4">
+                <blockquote className="text-2xl font-black text-slate-800 dark:text-slate-100 leading-tight mb-4 px-4">
                   "Made by student for students"
                 </blockquote>
                 
                 <div className="flex items-center justify-center gap-2 mb-10">
-                  <div className="h-px w-8 bg-slate-200" />
-                  <cite className="text-indigo-600 font-bold not-italic text-sm">
+                  <div className="h-px w-8 bg-slate-200 dark:bg-slate-700" />
+                  <cite className="text-indigo-600 dark:text-indigo-400 font-bold not-italic text-sm">
                     Chippa Shreyansh
                   </cite>
-                  <div className="h-px w-8 bg-slate-200" />
+                  <div className="h-px w-8 bg-slate-200 dark:bg-slate-700" />
                 </div>
 
                 <button
@@ -123,35 +175,44 @@ export default function App() {
           )}
         </AnimatePresence>
 
-        {/* Status Bar Mockup */}
-        <div className="h-6 bg-white flex items-center justify-between px-6 text-[10px] font-bold text-slate-400">
-          <span>9:41</span>
-          <div className="flex gap-1">
-            <div className="w-3 h-3 rounded-full border border-slate-300" />
-            <div className="w-3 h-3 rounded-full border border-slate-300" />
-            <div className="w-5 h-3 rounded-sm border border-slate-300" />
-          </div>
-        </div>
-
         {/* Header */}
-        <header className="bg-white px-6 py-4 flex items-center justify-between">
+        <header className="bg-white dark:bg-slate-800 px-6 py-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-700 transition-colors">
           <div 
             className="flex items-center gap-2 cursor-pointer active:opacity-70 transition-opacity"
             onClick={() => {
-              setCurrentView('home');
+              handleSetView('home');
               setShowQuote(true);
             }}
           >
             <div className="bg-indigo-600 p-1.5 rounded-xl text-white">
               <GraduationCap size={20} />
             </div>
-            <h1 className="text-lg font-extrabold tracking-tight text-slate-800">
+            <h1 className="text-lg font-extrabold tracking-tight text-slate-800 dark:text-slate-100">
               stardesk
             </h1>
           </div>
-          <button className="p-2 text-slate-400 hover:text-indigo-600">
-            <Sparkles size={20} />
-          </button>
+          <div className="flex items-center gap-2">
+            <motion.button 
+              whileTap={{ scale: 0.9 }}
+              onClick={toggleTheme}
+              className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors relative w-10 h-10 flex items-center justify-center"
+            >
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={isDarkMode ? 'dark' : 'light'}
+                  initial={{ y: -20, opacity: 0, rotate: -90 }}
+                  animate={{ y: 0, opacity: 1, rotate: 0 }}
+                  exit={{ y: 20, opacity: 0, rotate: 90 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+                </motion.div>
+              </AnimatePresence>
+            </motion.button>
+            <button className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
+              <Sparkles size={20} />
+            </button>
+          </div>
         </header>
 
         {/* Main Content Area */}
@@ -165,7 +226,7 @@ export default function App() {
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
             >
               <div className="px-6 pt-4">
-                <h2 className="text-2xl font-black text-slate-800 capitalize">
+                <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 capitalize">
                   {currentView === 'home' ? 'Dashboard' : currentView}
                 </h2>
               </div>
@@ -175,73 +236,74 @@ export default function App() {
         </main>
 
         {/* Bottom Navigation Bar */}
-        <nav className="absolute bottom-0 left-0 right-0 bg-white/80 backdrop-blur-lg border-t border-slate-100 px-6 py-3 flex justify-between items-center z-40">
+        <nav className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-lg border-t border-slate-100 dark:border-slate-700 px-6 py-3 flex justify-between items-center z-40 transition-colors">
           <NavButton 
             active={currentView === 'home'} 
-            onClick={() => setCurrentView('home')} 
+            onClick={() => handleSetView('home')} 
             icon={<Home size={24} />} 
             label="Home" 
           />
           <NavButton 
             active={currentView === 'homework'} 
-            onClick={() => setCurrentView('homework')} 
+            onClick={() => handleSetView('homework')} 
             icon={<BookOpen size={24} />} 
             label="Tasks" 
           />
           <NavButton 
             active={currentView === 'timer'} 
-            onClick={() => setCurrentView('timer')} 
+            onClick={() => handleSetView('timer')} 
             icon={<Timer size={24} />} 
             label="Focus" 
           />
           <NavButton 
             active={currentView === 'exams'} 
-            onClick={() => setCurrentView('exams')} 
+            onClick={() => handleSetView('exams')} 
             icon={<Trophy size={24} />} 
             label="Exams" 
           />
+          <NavButton 
+            active={currentView === 'profile'} 
+            onClick={() => handleSetView('profile')} 
+            icon={<User size={24} />} 
+            label="You" 
+          />
         </nav>
-
-        {/* Android Navigation Bar Mockup */}
-        <div className="h-4 bg-white flex justify-center items-center pb-1">
-          <div className="w-24 h-1 bg-slate-200 rounded-full" />
-        </div>
       </div>
     </div>
   );
 }
 
-function MobileMenuCard({ title, icon, color, onClick, fullWidth }: { 
+const MobileMenuCard = React.memo(({ title, icon, color, onClick, fullWidth }: { 
   title: string; 
   icon: React.ReactNode; 
   color: string;
   onClick: () => void;
   fullWidth?: boolean;
-}) {
+}) => {
   return (
     <motion.button
       whileTap={{ scale: 0.95 }}
       onClick={onClick}
-      className={`${color} ${fullWidth ? 'w-full' : 'flex-1'} p-6 rounded-[28px] shadow-sm border border-slate-100 flex flex-col items-center justify-center gap-3 text-center transition-all active:shadow-inner`}
+      className={`${color} ${fullWidth ? 'w-full' : 'flex-1'} p-6 rounded-[28px] shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center gap-3 text-center transition-all active:shadow-inner`}
     >
-      <div className="p-3 rounded-2xl bg-slate-50">
+      <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-700/50">
         {icon}
       </div>
-      <span className="font-bold text-sm text-slate-700">{title}</span>
+      <span className="font-bold text-sm text-slate-700 dark:text-slate-300">{title}</span>
     </motion.button>
   );
-}
+});
 
-function NavButton({ active, onClick, icon, label }: { 
+const NavButton = React.memo(({ active, onClick, icon, label }: { 
   active: boolean; 
   onClick: () => void; 
   icon: React.ReactNode; 
   label: string;
-}) {
+}) => {
   return (
     <button 
       onClick={onClick}
-      className={`flex flex-col items-center gap-1 transition-all ${active ? 'text-indigo-600' : 'text-slate-400'}`}
+      className={`flex flex-col items-center gap-1 transition-all ${active ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`}
     >
       <motion.div
         animate={{ scale: active ? 1.1 : 1, y: active ? -2 : 0 }}
@@ -252,10 +314,10 @@ function NavButton({ active, onClick, icon, label }: {
       {active && (
         <motion.div 
           layoutId="nav-indicator"
-          className="w-1 h-1 rounded-full bg-indigo-600 mt-0.5"
+          className="w-1 h-1 rounded-full bg-indigo-600 dark:bg-indigo-400 mt-0.5"
         />
       )}
     </button>
   );
-}
+});
 

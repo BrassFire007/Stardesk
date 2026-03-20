@@ -36,10 +36,6 @@ export default function ExamTracker() {
       rank: rank ? parseInt(rank) : undefined,
     };
 
-    if (percentage < 40) {
-      window.open("https://youtu.be/QDia3e12czc?si=Dm5DRdlga8W03c6M", "_blank");
-    }
-
     setExams(prev => [newExam, ...prev]);
     setName('');
     setDate('');

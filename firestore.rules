@@ -1,0 +1,128 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "autodeskch@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidEmail(email) {
+      return email is string &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUrl(url) {
+      return url is string &&
+        (url.matches("^https://.*") || url.matches("^http://.*") || url == "");
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'name', 'email']) &&
+             data.uid == request.auth.uid &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             isValidEmail(data.email) &&
+             isValidUrl(data.photoURL) &&
+             (data.role == 'user' || isAdmin());
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll(['senderId', 'senderName', 'text', 'timestamp']) &&
+             (data.senderId == request.auth.uid || data.senderId == 'system') &&
+             data.senderName is string && data.senderName.size() < 100 &&
+             data.text is string && data.text.size() > 0 && data.text.size() < 5000 &&
+             data.timestamp is timestamp;
+    }
+
+    function isValidGroup(data) {
+      return data.keys().hasAll(['name', 'createdAt', 'createdBy']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.createdAt is timestamp &&
+             data.createdBy == request.auth.uid;
+    }
+
+    function isValidDirectChat(data) {
+      return data.keys().hasAll(['participants', 'updatedAt']) &&
+             data.participants is list && data.participants.size() == 2 &&
+             request.auth.uid in data.participants &&
+             data.updatedAt is timestamp;
+    }
+
+    // ===============================================================
+    // Match Rules
+    // ===============================================================
+
+    // User profiles
+    match /users/{userId} {
+      // PII Protection: Only allow reading if it's the owner or if we only expose public fields.
+      // For this app, we allow reading other users for search, but we should be careful.
+      // A better way would be a public_users collection.
+      // For now, we'll allow reading but strictly validate writes.
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
+                    request.resource.data.role == resource.data.role; // Prevent self-escalation
+      allow update: if isAdmin() && isValidUser(request.resource.data);
+    }
+
+    // Group chats
+    match /groups/{groupId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidGroup(request.resource.data);
+      allow update: if isAuthenticated() && (
+        (resource.data.createdBy == request.auth.uid && isValidGroup(request.resource.data)) || 
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deletedBy', 'lastMessage', 'updatedAt'])
+      );
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.createdBy == request.auth.uid);
+
+      match /messages/{messageId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated() && isValidMessage(request.resource.data);
+        allow update: if isAuthenticated() && resource.data.senderId == request.auth.uid && isValidMessage(request.resource.data);
+        allow delete: if isAdmin() || (isAuthenticated() && (resource.data.senderId == request.auth.uid || get(/databases/$(database)/documents/groups/$(groupId)).data.createdBy == request.auth.uid));
+      }
+    }
+
+    // Direct chats
+    match /direct_chats/{chatId} {
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.participants;
+      allow create: if isAuthenticated() && isValidDirectChat(request.resource.data);
+      allow update: if isAuthenticated() && request.auth.uid in resource.data.participants && 
+                    (isValidDirectChat(request.resource.data) || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deletedBy', 'lastMessage', 'updatedAt']));
+      allow delete: if isAdmin() || (isAuthenticated() && request.auth.uid in resource.data.participants);
+
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/direct_chats/$(chatId)).data.participants;
+        allow create: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/direct_chats/$(chatId)).data.participants && isValidMessage(request.resource.data);
+        allow update: if isAuthenticated() && resource.data.senderId == request.auth.uid && isValidMessage(request.resource.data);
+        allow delete: if isAdmin() || (isAuthenticated() && (resource.data.senderId == request.auth.uid || request.auth.uid in get(/databases/$(database)/documents/direct_chats/$(chatId)).data.participants));
+      }
+    }
+
+    // Test connection path
+    match /test/connection {
+      allow read: if true;
+    }
+  }
+}

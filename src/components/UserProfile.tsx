@@ -1,18 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { User, Camera, Trophy, Calendar, Award, LogOut, Moon, Sun } from 'lucide-react';
+import { User as UserIcon, Camera, Trophy, Calendar, Award, LogOut, Moon, Sun, LogIn } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Exam } from '../types';
+import { auth, onAuthStateChanged, FirebaseUser, signInWithPopup, googleProvider, signOut } from '../firebase';
 
 interface UserProfileProps {
-  isDarkMode: boolean;
-  onToggleTheme: () => void;
 }
 
-export default function UserProfile({ isDarkMode, onToggleTheme }: UserProfileProps) {
-  const [name, setName] = useState(() => localStorage.getItem('stardesk_user_name') || 'Student');
-  const [photo, setPhoto] = useState(() => localStorage.getItem('stardesk_user_photo') || '');
+export default function UserProfile({}: UserProfileProps) {
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [loading, setLoading] = useState(true);
   const [exams, setExams] = useState<Exam[]>([]);
   const [isEditing, setIsEditing] = useState(false);
+  const [newName, setNewName] = useState('');
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setNewName(u?.displayName || '');
+      setLoading(false);
+    });
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     const savedExams = localStorage.getItem('stardesk_exams');
@@ -22,22 +31,27 @@ export default function UserProfile({ isDarkMode, onToggleTheme }: UserProfilePr
   }, []);
 
   const handleSaveName = React.useCallback(() => {
-    localStorage.setItem('stardesk_user_name', name);
+    // Note: Updating displayName in Firebase Auth requires updateProfile
+    // For now we'll just update local state and localStorage as a fallback
+    localStorage.setItem('stardesk_user_name', newName);
     setIsEditing(false);
-  }, [name]);
+  }, [newName]);
 
-  const handlePhotoUpload = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        setPhoto(base64String);
-        localStorage.setItem('stardesk_user_photo', base64String);
-      };
-      reader.readAsDataURL(file);
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (err) {
+      console.error('Login error:', err);
     }
-  }, []);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+  };
 
   const averagePercentage = React.useMemo(() => {
     return exams.length > 0 
@@ -45,68 +59,79 @@ export default function UserProfile({ isDarkMode, onToggleTheme }: UserProfilePr
       : '0';
   }, [exams]);
 
+  if (loading) return <div className="flex items-center justify-center h-64">Loading...</div>;
+
+  if (!user) {
+    return (
+      <div className="w-full p-8 flex flex-col items-center justify-center text-center space-y-6">
+        <div className="bg-indigo-100 dark:bg-indigo-900/30 p-8 rounded-[40px]">
+          <UserIcon size={64} className="text-indigo-600 dark:text-indigo-400" />
+        </div>
+        <div>
+          <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 mb-2">Your Profile</h2>
+          <p className="text-slate-500 dark:text-slate-400">Sign in to sync your progress and join the community.</p>
+        </div>
+        <button
+          onClick={handleLogin}
+          className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-bold shadow-lg shadow-indigo-200 dark:shadow-none active:scale-95 transition-all flex items-center gap-2"
+        >
+          <LogIn size={20} />
+          Sign in with Google
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full p-4 space-y-6">
       {/* Profile Header */}
       <div className="bg-white dark:bg-slate-800 rounded-[32px] p-8 shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center text-center relative">
-        {/* Theme Toggle */}
-        <motion.button 
-          whileTap={{ scale: 0.9 }}
-          onClick={onToggleTheme}
-          className="absolute top-6 right-6 w-10 h-10 rounded-xl bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors flex items-center justify-center overflow-hidden"
-        >
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={isDarkMode ? 'dark' : 'light'}
-              initial={{ y: -20, opacity: 0, rotate: -90 }}
-              animate={{ y: 0, opacity: 1, rotate: 0 }}
-              exit={{ y: 20, opacity: 0, rotate: 90 }}
-              transition={{ duration: 0.2 }}
-            >
-              {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-            </motion.div>
-          </AnimatePresence>
-        </motion.button>
-
         <div className="relative mb-4">
-          <div className="w-24 h-24 rounded-[32px] bg-indigo-50 border-4 border-white shadow-md overflow-hidden flex items-center justify-center">
-            {photo ? (
-              <img src={photo} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-            ) : (
-              <User size={40} className="text-indigo-300" />
-            )}
-          </div>
-          <label className="absolute -bottom-2 -right-2 bg-indigo-600 text-white p-2 rounded-xl shadow-lg cursor-pointer hover:bg-indigo-700 transition-colors">
-            <Camera size={16} />
-            <input type="file" className="hidden" accept="image/*" onChange={handlePhotoUpload} />
-          </label>
+          <img 
+            src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} 
+            alt={user.displayName || ''} 
+            className="w-32 h-32 rounded-[40px] shadow-xl object-cover border-4 border-white dark:border-slate-800"
+            referrerPolicy="no-referrer"
+          />
+          <div className="absolute -bottom-2 -right-2 bg-emerald-500 w-8 h-8 rounded-full border-4 border-white dark:border-slate-800 shadow-sm" />
         </div>
-
+        
         {isEditing ? (
-          <div className="flex gap-2 mt-2">
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="px-4 py-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+          <div className="flex flex-col items-center gap-2">
+            <input 
+              type="text" 
+              value={newName} 
+              onChange={(e) => setNewName(e.target.value)}
+              className="text-2xl font-black text-center bg-slate-50 dark:bg-slate-900 border-none rounded-xl px-4 py-2 focus:ring-2 focus:ring-indigo-500/20 dark:text-slate-100"
               autoFocus
             />
-            <button
+            <button 
               onClick={handleSaveName}
-              className="bg-indigo-600 text-white px-4 py-1 rounded-lg text-sm font-bold"
+              className="text-indigo-600 dark:text-indigo-400 font-bold text-sm"
             >
-              Save
+              Save Name
             </button>
           </div>
         ) : (
-          <h3 
-            className="text-2xl font-black text-slate-800 dark:text-slate-100 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
-            onClick={() => setIsEditing(true)}
-          >
-            {name}
-          </h3>
+          <div className="group relative">
+            <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 mb-1">{user.displayName}</h2>
+            <button 
+              onClick={() => setIsEditing(true)}
+              className="absolute -right-6 top-1 text-slate-300 hover:text-indigo-500 transition-colors"
+            >
+              <Camera size={16} />
+            </button>
+          </div>
         )}
-        <p className="text-slate-400 dark:text-slate-500 text-sm font-medium mt-1">Aspiring Scholar</p>
+        <p className="text-slate-500 dark:text-slate-400 mb-6 font-medium">{user.email}</p>
+
+        <button 
+          onClick={handleLogout}
+          className="flex items-center gap-2 text-rose-500 font-bold text-sm hover:text-rose-600 transition-colors"
+        >
+          <LogOut size={16} />
+          Sign Out
+        </button>
 
         <div className="grid grid-cols-2 gap-4 w-full mt-8">
           <div className="bg-slate-50 dark:bg-slate-700/50 p-4 rounded-2xl text-center">

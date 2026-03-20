@@ -43,6 +43,12 @@ export default function PomodoroTimer() {
   const minutes = Math.floor(timeLeft / 60);
   const seconds = timeLeft % 60;
 
+  const totalTime = mode === 'work' ? 25 * 60 : 5 * 60;
+  const percentage = timeLeft / totalTime;
+  const radius = 100;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference * (1 - percentage);
+
   return (
     <div className="flex flex-col items-center justify-center space-y-6 p-4">
       <div className="flex space-x-3 mb-2">
@@ -73,10 +79,44 @@ export default function PomodoroTimer() {
       <motion.div 
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="relative w-56 h-56 flex items-center justify-center rounded-full border-[12px] border-slate-50 dark:border-slate-800 bg-white dark:bg-slate-800 shadow-xl"
+        className="relative w-64 h-64 flex items-center justify-center"
       >
-        <div className="text-5xl font-mono font-black text-slate-800 dark:text-slate-100 tracking-tighter">
-          {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+        {/* Progress Ring SVG */}
+        <svg className="absolute w-full h-full -rotate-90 transform" viewBox="0 0 220 220">
+          {/* Background Circle */}
+          <circle
+            cx="110"
+            cy="110"
+            r={radius}
+            stroke="currentColor"
+            strokeWidth="8"
+            fill="transparent"
+            className="text-slate-100 dark:text-slate-800"
+          />
+          {/* Progress Circle */}
+          <motion.circle
+            cx="110"
+            cy="110"
+            r={radius}
+            stroke="currentColor"
+            strokeWidth="8"
+            fill="transparent"
+            strokeDasharray={circumference}
+            initial={{ strokeDashoffset: circumference }}
+            animate={{ strokeDashoffset }}
+            transition={{ duration: 0.5, ease: "linear" }}
+            strokeLinecap="round"
+            className={mode === 'work' ? 'text-indigo-600' : 'text-emerald-600'}
+          />
+        </svg>
+
+        <div className="relative z-10 flex flex-col items-center justify-center w-52 h-52 rounded-full bg-white dark:bg-slate-900 shadow-inner">
+          <div className="text-5xl font-mono font-black text-slate-800 dark:text-slate-100 tracking-tighter">
+            {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+          </div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 mt-1">
+            {mode === 'work' ? 'Focusing' : 'Resting'}
+          </div>
         </div>
       </motion.div>
 

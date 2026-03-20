@@ -11,25 +11,44 @@ import {
   Timer, 
   Trophy, 
   Home, 
-  User,
+  User as UserIcon,
   ChevronLeft,
   GraduationCap,
   Sparkles,
   Moon,
-  Sun
+  Sun,
+  MessageSquare,
+  LogIn
 } from 'lucide-react';
+import { auth, onAuthStateChanged, FirebaseUser, signInWithPopup, googleProvider } from './firebase';
 import HomeworkTracker from './components/HomeworkTracker';
 import PomodoroTimer from './components/PomodoroTimer';
 import ExamTracker from './components/ExamTracker';
 import UserProfile from './components/UserProfile';
+import Chat from './components/Chat';
+import DeveloperOptions from './components/DeveloperOptions';
 import { View } from './types';
 import { QUOTES } from './constants';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<View>('home');
   const [showQuote, setShowQuote] = useState(false);
-  const [dailyQuote, setDailyQuote] = useState('');
+  const [dailyQuote] = useState(() => {
+    const lastIndex = parseInt(localStorage.getItem('stardesk_last_quote_index') || '-1');
+    const nextIndex = (lastIndex + 1) % QUOTES.length;
+    localStorage.setItem('stardesk_last_quote_index', nextIndex.toString());
+    return QUOTES[nextIndex];
+  });
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('stardesk_theme') === 'dark');
+  const [devClickCount, setDevClickCount] = useState(0);
+  const [isChatActive, setIsChatActive] = useState(false);
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  const currentViewRef = React.useRef(currentView);
+  useEffect(() => {
+    currentViewRef.current = currentView;
+  }, [currentView]);
 
   // Memoize theme toggle to prevent unnecessary re-renders of components that use it
   const toggleTheme = React.useCallback(() => {
@@ -52,14 +71,24 @@ export default function App() {
   }, [isDarkMode]);
 
   useEffect(() => {
-    // Pick a random quote on mount - only once
-    const randomIndex = Math.floor(Math.random() * QUOTES.length);
-    setDailyQuote(QUOTES[randomIndex]);
-  }, []); // Empty dependency array ensures this only runs on mount
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setAuthLoading(false);
+    });
+    return unsubscribe;
+  }, []);
+
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (err) {
+      console.error('Login error:', err);
+    }
+  };
 
   useEffect(() => {
     const backHandler = CapacitorApp.addListener('backButton', ({ canGoBack }) => {
-      if (currentView !== 'home') {
+      if (currentViewRef.current !== 'home') {
         setCurrentView('home');
       } else {
         // If we are on home, we can let the app close or handle exit logic
@@ -70,7 +99,7 @@ export default function App() {
     return () => {
       backHandler.then(h => h.remove());
     };
-  }, [currentView]);
+  }, []); // Run only once on mount
 
   const renderView = () => {
     switch (currentView) {
@@ -81,14 +110,29 @@ export default function App() {
       case 'exams':
         return <ExamTracker />;
       case 'profile':
-        return <UserProfile isDarkMode={isDarkMode} onToggleTheme={toggleTheme} />;
+        return <UserProfile />;
+      case 'chat':
+        return <Chat onChatActiveChange={setIsChatActive} />;
+      case 'developer':
+        return <DeveloperOptions />;
       default:
-        const userName = localStorage.getItem('stardesk_user_name') || 'Student';
+        const userName = user?.displayName || localStorage.getItem('stardesk_user_name') || 'Student';
         return (
           <div className="flex flex-col gap-4 p-4">
-            <div className="bg-indigo-600 dark:bg-indigo-700 rounded-3xl p-6 text-white shadow-lg mb-2">
-              <h3 className="text-2xl font-bold mb-1">Hello {userName}!</h3>
-              <p className="text-indigo-100 text-sm">Ready to crush your goals today?</p>
+            <div className="bg-indigo-600 dark:bg-indigo-700 rounded-3xl p-6 text-white shadow-lg mb-2 flex justify-between items-center">
+              <div>
+                <h3 className="text-2xl font-bold mb-1">Hello {userName}!</h3>
+                <p className="text-indigo-100 text-sm">Ready to crush your goals today?</p>
+              </div>
+              {!user && (
+                <button 
+                  onClick={handleLogin}
+                  className="bg-white/20 hover:bg-white/30 p-3 rounded-2xl transition-colors"
+                  title="Sign in"
+                >
+                  <LogIn size={20} />
+                </button>
+              )}
             </div>
             
             <div className="grid grid-cols-2 gap-4">
@@ -176,20 +220,33 @@ export default function App() {
         </AnimatePresence>
 
         {/* Header */}
-        <header className="bg-white dark:bg-slate-800 px-6 py-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-700 transition-colors">
-          <div 
-            className="flex items-center gap-2 cursor-pointer active:opacity-70 transition-opacity"
-            onClick={() => {
-              handleSetView('home');
-              setShowQuote(true);
-            }}
-          >
-            <div className="bg-indigo-600 p-1.5 rounded-xl text-white">
-              <GraduationCap size={20} />
+        <header className="bg-white dark:bg-slate-800 px-6 pt-10 pb-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-700 transition-colors">
+          <div className="flex items-center gap-3">
+            {currentView !== 'home' && (
+              <motion.button
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => handleSetView('home')}
+                className="p-2 -ml-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors"
+              >
+                <ChevronLeft size={24} />
+              </motion.button>
+            )}
+            <div 
+              className="flex items-center gap-2 cursor-pointer active:opacity-70 transition-opacity"
+              onClick={() => {
+                handleSetView('home');
+                if (currentView === 'home') setShowQuote(true);
+              }}
+            >
+              <div className="bg-indigo-600 p-1.5 rounded-xl text-white">
+                <GraduationCap size={20} />
+              </div>
+              <h1 className="text-lg font-extrabold tracking-tight text-slate-800 dark:text-slate-100">
+                stardesk
+              </h1>
             </div>
-            <h1 className="text-lg font-extrabold tracking-tight text-slate-800 dark:text-slate-100">
-              stardesk
-            </h1>
           </div>
           <div className="flex items-center gap-2">
             <motion.button 
@@ -209,14 +266,25 @@ export default function App() {
                 </motion.div>
               </AnimatePresence>
             </motion.button>
-            <button className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
+            <button 
+              onClick={() => {
+                const newCount = devClickCount + 1;
+                if (newCount >= 7) {
+                  handleSetView('developer');
+                  setDevClickCount(0);
+                } else {
+                  setDevClickCount(newCount);
+                }
+              }}
+              className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400"
+            >
               <Sparkles size={20} />
             </button>
           </div>
         </header>
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto pb-24">
+        <main className={`flex-1 ${!isChatActive ? 'overflow-y-auto pb-24' : 'overflow-hidden flex flex-col h-full'}`}>
           <AnimatePresence mode="wait">
             <motion.div
               key={currentView}
@@ -224,50 +292,55 @@ export default function App() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className={isChatActive ? 'flex-1 flex flex-col h-full' : ''}
             >
-              <div className="px-6 pt-4">
-                <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 capitalize">
-                  {currentView === 'home' ? 'Dashboard' : currentView}
-                </h2>
-              </div>
+              {!isChatActive && (
+                <div className="px-6 pt-4 flex items-center justify-between">
+                  <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 capitalize">
+                    {currentView === 'home' ? 'Dashboard' : currentView}
+                  </h2>
+                  {currentView !== 'home' && (
+                    <motion.button
+                      initial={{ opacity: 0, x: 10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => handleSetView('home')}
+                      className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-bold text-sm active:scale-95 transition-transform bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 rounded-xl shadow-sm"
+                    >
+                      <ChevronLeft size={16} />
+                      Dashboard
+                    </motion.button>
+                  )}
+                </div>
+              )}
               {renderView()}
             </motion.div>
           </AnimatePresence>
         </main>
 
         {/* Bottom Navigation Bar */}
-        <nav className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-lg border-t border-slate-100 dark:border-slate-700 px-6 py-3 flex justify-between items-center z-40 transition-colors">
-          <NavButton 
-            active={currentView === 'home'} 
-            onClick={() => handleSetView('home')} 
-            icon={<Home size={24} />} 
-            label="Home" 
-          />
-          <NavButton 
-            active={currentView === 'homework'} 
-            onClick={() => handleSetView('homework')} 
-            icon={<BookOpen size={24} />} 
-            label="Tasks" 
-          />
-          <NavButton 
-            active={currentView === 'timer'} 
-            onClick={() => handleSetView('timer')} 
-            icon={<Timer size={24} />} 
-            label="Focus" 
-          />
-          <NavButton 
-            active={currentView === 'exams'} 
-            onClick={() => handleSetView('exams')} 
-            icon={<Trophy size={24} />} 
-            label="Exams" 
-          />
-          <NavButton 
-            active={currentView === 'profile'} 
-            onClick={() => handleSetView('profile')} 
-            icon={<User size={24} />} 
-            label="You" 
-          />
-        </nav>
+        {!isChatActive && (
+          <nav className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-lg border-t border-slate-100 dark:border-slate-700 px-6 py-3 flex justify-between items-center z-40 transition-colors">
+            <NavButton 
+              active={currentView === 'home'} 
+              onClick={() => handleSetView('home')} 
+              icon={<Home size={24} />} 
+              label="Home" 
+            />
+            <NavButton 
+              active={currentView === 'chat'} 
+              onClick={() => handleSetView('chat')} 
+              icon={<MessageSquare size={24} />} 
+              label="Chat" 
+            />
+            <NavButton 
+              active={currentView === 'profile'} 
+              onClick={() => handleSetView('profile')} 
+              icon={<UserIcon size={24} />} 
+              label="You" 
+            />
+          </nav>
+        )}
       </div>
     </div>
   );

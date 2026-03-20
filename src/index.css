@@ -8,8 +8,18 @@
 
 @variant dark (&:where(.dark, .dark *));
 
+/* Safe area support for mobile devices */
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 body {
   @apply bg-[#F8F9FC] text-slate-900 antialiased transition-colors duration-500;
+  overflow: hidden; /* Prevent body scroll, use app container scroll */
 }
 
 html.dark body {

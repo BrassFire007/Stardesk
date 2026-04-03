@@ -55,12 +55,31 @@
         "lastMessage": { "type": "string" }
       },
       "required": ["id", "participants", "updatedAt"]
+    },
+    "Exam": {
+      "title": "Exam",
+      "description": "An exam record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "marks": { "type": "number" },
+        "totalMarks": { "type": "number" },
+        "percentage": { "type": "number" },
+        "rank": { "type": "integer" }
+      },
+      "required": ["id", "name", "date", "marks", "totalMarks", "percentage"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": "User",
       "description": "User profiles"
+    },
+    "/users/{userId}/exams/{examId}": {
+      "schema": "Exam",
+      "description": "User exam records"
     },
     "/groups/{groupId}": {
       "schema": "GroupChat",

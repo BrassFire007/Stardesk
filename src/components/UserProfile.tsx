@@ -2,14 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { User as UserIcon, Camera, Trophy, Calendar, Award, LogOut, Moon, Sun, LogIn } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Exam } from '../types';
-import { auth, onAuthStateChanged, FirebaseUser, signInWithPopup, googleProvider, signOut } from '../firebase';
+import { auth, db, onAuthStateChanged, FirebaseUser, signInWithPopup, googleProvider, signOut, collection, query, orderBy, onSnapshot, handleFirestoreError, OperationType } from '../firebase';
 
-interface UserProfileProps {
-}
-
-export default function UserProfile({}: UserProfileProps) {
-  const [user, setUser] = useState<FirebaseUser | null>(null);
+export default function UserProfile() {
+  const [user, setUser] = useState<FirebaseUser | null>(auth.currentUser);
   const [loading, setLoading] = useState(true);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
   const [exams, setExams] = useState<Exam[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [newName, setNewName] = useState('');
@@ -24,11 +23,26 @@ export default function UserProfile({}: UserProfileProps) {
   }, []);
 
   useEffect(() => {
-    const savedExams = localStorage.getItem('stardesk_exams');
-    if (savedExams) {
-      setExams(JSON.parse(savedExams));
+    if (!user) {
+      const savedExams = localStorage.getItem('stardesk_exams');
+      if (savedExams) {
+        setExams(JSON.parse(savedExams));
+      }
+      return;
     }
-  }, []);
+
+    const path = `users/${user.uid}/exams`;
+    const q = query(collection(db, path), orderBy('date', 'desc'));
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Exam));
+      setExams(items);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, path);
+    });
+
+    return unsubscribe;
+  }, [user]);
 
   const handleSaveName = React.useCallback(() => {
     // Note: Updating displayName in Firebase Auth requires updateProfile
@@ -38,10 +52,17 @@ export default function UserProfile({}: UserProfileProps) {
   }, [newName]);
 
   const handleLogin = async () => {
+    if (loginLoading) return;
+    setLoginLoading(true);
+    setLoginError(null);
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Login error:', err);
+      if (err.code !== 'auth/cancelled-popup-request') {
+        setLoginError(err.message);
+      }
+      setLoginLoading(false);
     }
   };
 
@@ -73,11 +94,23 @@ export default function UserProfile({}: UserProfileProps) {
         </div>
         <button
           onClick={handleLogin}
-          className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-bold shadow-lg shadow-indigo-200 dark:shadow-none active:scale-95 transition-all flex items-center gap-2"
+          disabled={loginLoading}
+          className={`${loginLoading ? 'bg-indigo-400' : 'bg-indigo-600'} text-white px-8 py-4 rounded-2xl font-bold shadow-lg shadow-indigo-200 dark:shadow-none active:scale-95 transition-all flex items-center gap-2`}
         >
-          <LogIn size={20} />
-          Sign in with Google
+          {loginLoading ? (
+            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          ) : (
+            <LogIn size={20} />
+          )}
+          {loginLoading ? 'Signing in...' : 'Sign in with Google'}
         </button>
+
+        {loginError && (
+          <div className="bg-rose-50 dark:bg-rose-900/20 p-3 rounded-xl border border-rose-100 dark:border-rose-800/50 flex items-center gap-3">
+            <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+            <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">{loginError}</p>
+          </div>
+        )}
       </div>
     );
   }

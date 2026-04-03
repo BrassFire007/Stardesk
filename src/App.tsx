@@ -14,19 +14,22 @@ import {
   User as UserIcon,
   ChevronLeft,
   GraduationCap,
+  MessageCircleQuestion,
   Sparkles,
   Moon,
   Sun,
   MessageSquare,
   LogIn
 } from 'lucide-react';
-import { auth, onAuthStateChanged, FirebaseUser, signInWithPopup, googleProvider } from './firebase';
+import { auth, db, onAuthStateChanged, FirebaseUser, signInWithPopup, googleProvider, doc, setDoc, serverTimestamp, handleFirestoreError, OperationType } from './firebase';
 import HomeworkTracker from './components/HomeworkTracker';
 import PomodoroTimer from './components/PomodoroTimer';
 import ExamTracker from './components/ExamTracker';
 import UserProfile from './components/UserProfile';
 import Chat from './components/Chat';
+import DoubtTab from './components/DoubtTab';
 import DeveloperOptions from './components/DeveloperOptions';
+import { PullToRefresh } from './components/PullToRefresh';
 import { View } from './types';
 import { QUOTES } from './constants';
 
@@ -44,6 +47,8 @@ export default function App() {
   const [isChatActive, setIsChatActive] = useState(false);
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   const currentViewRef = React.useRef(currentView);
   useEffect(() => {
@@ -58,6 +63,7 @@ export default function App() {
   // Memoize view switching
   const handleSetView = React.useCallback((view: View) => {
     setCurrentView(view);
+    setIsChatActive(false);
   }, []);
 
   useEffect(() => {
@@ -70,21 +76,50 @@ export default function App() {
     }
   }, [isDarkMode]);
 
+  // Sync user profile to Firestore
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setAuthLoading(false);
+      if (u) {
+        setLoginLoading(false);
+        setLoginError(null);
+        
+        const userRef = doc(db, 'users', u.uid);
+        setDoc(userRef, {
+          uid: u.uid,
+          name: u.displayName || 'Student',
+          email: u.email,
+          photoURL: u.photoURL,
+          lastSeen: serverTimestamp()
+        }, { merge: true }).catch(err => {
+          handleFirestoreError(err, OperationType.WRITE, `users/${u.uid}`);
+        });
+      }
     });
     return unsubscribe;
   }, []);
 
   const handleLogin = async () => {
+    if (loginLoading) return;
+    setLoginLoading(true);
+    setLoginError(null);
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Login error:', err);
+      if (err.code !== 'auth/cancelled-popup-request') {
+        setLoginError(err.message);
+      }
+      setLoginLoading(false);
     }
   };
+
+  const handleRefresh = React.useCallback(async () => {
+    // Simulate a reload or refresh data
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    window.location.reload();
+  }, []);
 
   useEffect(() => {
     const backHandler = CapacitorApp.addListener('backButton', ({ canGoBack }) => {
@@ -101,7 +136,7 @@ export default function App() {
     };
   }, []); // Run only once on mount
 
-  const renderView = () => {
+  const renderedView = React.useMemo(() => {
     switch (currentView) {
       case 'homework':
         return <HomeworkTracker />;
@@ -113,6 +148,8 @@ export default function App() {
         return <UserProfile />;
       case 'chat':
         return <Chat onChatActiveChange={setIsChatActive} />;
+      case 'doubt':
+        return <DoubtTab onBack={() => handleSetView('home')} onChatActiveChange={setIsChatActive} />;
       case 'developer':
         return <DeveloperOptions />;
       default:
@@ -127,13 +164,25 @@ export default function App() {
               {!user && (
                 <button 
                   onClick={handleLogin}
-                  className="bg-white/20 hover:bg-white/30 p-3 rounded-2xl transition-colors"
+                  disabled={loginLoading}
+                  className={`${loginLoading ? 'bg-white/10' : 'bg-white/20 hover:bg-white/30'} p-3 rounded-2xl transition-colors relative`}
                   title="Sign in"
                 >
-                  <LogIn size={20} />
+                  {loginLoading ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <LogIn size={20} />
+                  )}
                 </button>
               )}
             </div>
+            
+            {loginError && (
+              <div className="bg-rose-50 dark:bg-rose-900/20 p-3 rounded-xl border border-rose-100 dark:border-rose-800/50 flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">{loginError}</p>
+              </div>
+            )}
             
             <div className="grid grid-cols-2 gap-4">
               <MobileMenuCard 
@@ -164,12 +213,12 @@ export default function App() {
           </div>
         );
     }
-  };
+  }, [currentView, user, loginLoading, loginError, dailyQuote, handleLogin, handleSetView]);
 
   return (
     <div className="flex justify-center bg-slate-200 min-h-screen transition-colors duration-300">
       {/* Mobile Container Emulator */}
-      <div className={`w-full max-w-[450px] bg-[#F8F9FC] dark:bg-slate-900 h-screen flex flex-col shadow-2xl relative overflow-hidden transition-colors duration-300 ${isDarkMode ? 'dark' : ''}`}>
+      <div className={`w-full max-w-[450px] bg-[#F8F9FC] dark:bg-slate-900 h-[100dvh] flex flex-col shadow-2xl relative overflow-hidden transition-colors duration-300 ${isDarkMode ? 'dark' : ''}`}>
         
         {/* Quote Bottom Sheet */}
         <AnimatePresence>
@@ -284,38 +333,40 @@ export default function App() {
         </header>
 
         {/* Main Content Area */}
-        <main className={`flex-1 ${!isChatActive ? 'overflow-y-auto pb-24' : 'overflow-hidden flex flex-col h-full'}`}>
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentView}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className={isChatActive ? 'flex-1 flex flex-col h-full' : ''}
-            >
-              {!isChatActive && (
-                <div className="px-6 pt-4 flex items-center justify-between">
-                  <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 capitalize">
-                    {currentView === 'home' ? 'Dashboard' : currentView}
-                  </h2>
-                  {currentView !== 'home' && (
-                    <motion.button
-                      initial={{ opacity: 0, x: 10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => handleSetView('home')}
-                      className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-bold text-sm active:scale-95 transition-transform bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 rounded-xl shadow-sm"
-                    >
-                      <ChevronLeft size={16} />
-                      Dashboard
-                    </motion.button>
-                  )}
-                </div>
-              )}
-              {renderView()}
-            </motion.div>
-          </AnimatePresence>
+        <main className={`flex-1 flex flex-col min-h-0 ${!isChatActive ? 'pb-24' : 'overflow-hidden'}`}>
+          <PullToRefresh onRefresh={handleRefresh} disabled={isChatActive}>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={currentView}
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                className="flex-1 flex flex-col min-h-0"
+              >
+                {!isChatActive && currentView !== 'doubt' && currentView !== 'chat' && (
+                  <div className="px-6 pt-4 flex items-center justify-between">
+                    <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 capitalize">
+                      {currentView === 'home' ? 'Dashboard' : currentView}
+                    </h2>
+                    {currentView !== 'home' && (
+                      <motion.button
+                        initial={{ opacity: 0, x: 10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => handleSetView('home')}
+                        className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-bold text-sm active:scale-95 transition-transform bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 rounded-xl shadow-sm"
+                      >
+                        <ChevronLeft size={16} />
+                        Dashboard
+                      </motion.button>
+                    )}
+                  </div>
+                )}
+                {renderedView}
+              </motion.div>
+            </AnimatePresence>
+          </PullToRefresh>
         </main>
 
         {/* Bottom Navigation Bar */}
@@ -332,6 +383,12 @@ export default function App() {
               onClick={() => handleSetView('chat')} 
               icon={<MessageSquare size={24} />} 
               label="Chat" 
+            />
+            <NavButton 
+              active={currentView === 'doubt'} 
+              onClick={() => handleSetView('doubt')} 
+              icon={<MessageCircleQuestion size={24} />} 
+              label="Doubt" 
             />
             <NavButton 
               active={currentView === 'profile'} 

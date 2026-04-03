@@ -19,7 +19,7 @@ export interface Exam {
   rank?: number;
 }
 
-export type View = 'home' | 'homework' | 'timer' | 'exams' | 'profile' | 'chat' | 'developer';
+export type View = 'home' | 'homework' | 'timer' | 'exams' | 'profile' | 'chat' | 'doubt' | 'developer';
 
 export interface UserProfileData {
   uid: string;

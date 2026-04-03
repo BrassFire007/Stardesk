@@ -4,15 +4,21 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Homework } from '../types';
 
 export default function HomeworkTracker() {
-  const [homeworks, setHomeworks] = useState<Homework[]>(() => {
-    const saved = localStorage.getItem('stardesk_homeworks');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [homeworks, setHomeworks] = useState<Homework[]>([]);
   const [newTitle, setNewTitle] = useState('');
   const [newDate, setNewDate] = useState('');
   const [newTime, setNewTime] = useState('09:00');
   const [newSubject, setNewSubject] = useState('');
   const [reminderOption, setReminderOption] = useState<'none' | '1h' | '1d' | '2d'>('none');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('stardesk_homeworks');
+    if (saved) {
+      setHomeworks(JSON.parse(saved));
+    }
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('stardesk_homeworks', JSON.stringify(homeworks));
@@ -77,6 +83,7 @@ export default function HomeworkTracker() {
     };
 
     setHomeworks(prev => [newItem, ...prev]);
+
     setNewTitle('');
     setNewDate('');
     setNewTime('09:00');
@@ -85,8 +92,8 @@ export default function HomeworkTracker() {
   }, [newTitle, newDate, newTime, newSubject, reminderOption]);
 
   const toggleComplete = React.useCallback((id: string) => {
-    setHomeworks(prev => prev.map(hw => 
-      hw.id === id ? { ...hw, completed: !hw.completed } : hw
+    setHomeworks(prev => prev.map(h => 
+      h.id === id ? { ...h, completed: !h.completed } : h
     ));
   }, []);
 
@@ -168,27 +175,33 @@ export default function HomeworkTracker() {
       </form>
 
       <div className="space-y-4">
-        <AnimatePresence mode="popLayout">
-          {homeworks.length === 0 ? (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-center py-12 text-gray-400"
-            >
-              <BookOpen size={48} className="mx-auto mb-4 opacity-20" />
-              <p>No homework added yet. Start by adding one above!</p>
-            </motion.div>
-          ) : (
-            homeworks.map((hw) => (
-              <HomeworkItem 
-                key={hw.id} 
-                hw={hw} 
-                onToggle={toggleComplete} 
-                onDelete={deleteHomework} 
-              />
-            ))
-          )}
-        </AnimatePresence>
+        {loading ? (
+          <div className="flex justify-center py-12">
+            <div className="w-8 h-8 border-4 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin" />
+          </div>
+        ) : (
+          <AnimatePresence mode="popLayout">
+            {homeworks.length === 0 ? (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-center py-12 text-gray-400"
+              >
+                <BookOpen size={48} className="mx-auto mb-4 opacity-20" />
+                <p>No homework added yet. Start by adding one above!</p>
+              </motion.div>
+            ) : (
+              homeworks.map((hw) => (
+                <HomeworkItem 
+                  key={hw.id} 
+                  hw={hw} 
+                  onToggle={toggleComplete} 
+                  onDelete={deleteHomework} 
+                />
+              ))
+            )}
+          </AnimatePresence>
+        )}
       </div>
     </div>
   );

@@ -2,21 +2,52 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Trophy, Calendar, Trash2, BarChart3, Hash } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Exam } from '../types';
+import { auth, db, onAuthStateChanged, collection, query, orderBy, onSnapshot, addDoc, doc, deleteDoc, handleFirestoreError, OperationType } from '../firebase';
 
 export default function ExamTracker() {
-  const [exams, setExams] = useState<Exam[]>(() => {
-    const saved = localStorage.getItem('stardesk_exams');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [user, setUser] = React.useState(auth.currentUser);
+  const [exams, setExams] = useState<Exam[]>([]);
   const [name, setName] = useState('');
   const [date, setDate] = useState('');
   const [marks, setMarks] = useState('');
   const [total, setTotal] = useState('');
   const [rank, setRank] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    localStorage.setItem('stardesk_exams', JSON.stringify(exams));
-  }, [exams]);
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      const saved = localStorage.getItem('stardesk_exams');
+      setExams(saved ? JSON.parse(saved) : []);
+      setLoading(false);
+      return;
+    }
+
+    const path = `users/${user.uid}/exams`;
+    const q = query(collection(db, path), orderBy('date', 'desc'));
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Exam));
+      setExams(items);
+      setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, path);
+    });
+
+    return unsubscribe;
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) {
+      localStorage.setItem('stardesk_exams', JSON.stringify(exams));
+    }
+  }, [exams, user]);
 
   const addExam = React.useCallback((e: React.FormEvent) => {
     e.preventDefault();
@@ -26,8 +57,7 @@ export default function ExamTracker() {
     const totalNum = parseFloat(total);
     const percentage = (marksNum / totalNum) * 100;
 
-    const newExam: Exam = {
-      id: crypto.randomUUID(),
+    const newExam: Omit<Exam, 'id'> = {
       name,
       date,
       marks: marksNum,
@@ -36,17 +66,33 @@ export default function ExamTracker() {
       rank: rank ? parseInt(rank) : undefined,
     };
 
-    setExams(prev => [newExam, ...prev]);
+    if (user) {
+      const path = `users/${user.uid}/exams`;
+      addDoc(collection(db, path), newExam).catch(err => {
+        handleFirestoreError(err, OperationType.CREATE, path);
+      });
+    } else {
+      const examWithId: Exam = { ...newExam, id: crypto.randomUUID() };
+      setExams(prev => [examWithId, ...prev]);
+    }
+
     setName('');
     setDate('');
     setMarks('');
     setTotal('');
     setRank('');
-  }, [name, date, marks, total, rank]);
+  }, [name, date, marks, total, rank, user]);
 
   const deleteExam = React.useCallback((id: string) => {
-    setExams(prev => prev.filter(e => e.id !== id));
-  }, []);
+    if (user) {
+      const path = `users/${user.uid}/exams/${id}`;
+      deleteDoc(doc(db, path)).catch(err => {
+        handleFirestoreError(err, OperationType.DELETE, path);
+      });
+    } else {
+      setExams(prev => prev.filter(e => e.id !== id));
+    }
+  }, [user]);
 
   return (
     <div className="w-full p-4 space-y-6">
@@ -100,15 +146,21 @@ export default function ExamTracker() {
       </form>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <AnimatePresence mode="popLayout">
-          {exams.map((exam) => (
-            <ExamItem 
-              key={exam.id} 
-              exam={exam} 
-              onDelete={deleteExam} 
-            />
-          ))}
-        </AnimatePresence>
+        {loading ? (
+          <div className="col-span-full flex justify-center py-12">
+            <div className="w-8 h-8 border-4 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
+          </div>
+        ) : (
+          <AnimatePresence mode="popLayout">
+            {exams.map((exam) => (
+              <ExamItem 
+                key={exam.id} 
+                exam={exam} 
+                onDelete={deleteExam} 
+              />
+            ))}
+          </AnimatePresence>
+        )}
       </div>
     </div>
   );

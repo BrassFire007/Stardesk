@@ -1,5 +1,5 @@
 {
   "name": "stardesk",
   "description": "A comprehensive student productivity suite featuring homework tracking, pomodoro focus timers, and exam performance analytics.",
-  "requestFramePermissions": []
+  "requestFramePermissions": ["camera"]
 }

@@ -69,6 +69,15 @@ service cloud.firestore {
              data.updatedAt is timestamp;
     }
 
+    function isValidExam(data) {
+      return data.keys().hasAll(['name', 'date', 'marks', 'totalMarks', 'percentage']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
+             data.date is string &&
+             data.marks is number &&
+             data.totalMarks is number &&
+             data.percentage is number;
+    }
+
     // ===============================================================
     // Match Rules
     // ===============================================================
@@ -84,6 +93,12 @@ service cloud.firestore {
       allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
                     request.resource.data.role == resource.data.role; // Prevent self-escalation
       allow update: if isAdmin() && isValidUser(request.resource.data);
+
+      match /exams/{examId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidExam(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
     }
 
     // Group chats

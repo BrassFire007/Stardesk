@@ -7,12 +7,12 @@
   "theme_color": "#4F46E5",
   "icons": [
     {
-      "src": "https://picsum.photos/seed/stardesk/192/192",
+      "src": "https://img.icons8.com/ios-filled/192/4f46e5/graduation-cap.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "https://picsum.photos/seed/stardesk/512/512",
+      "src": "https://img.icons8.com/ios-filled/512/4f46e5/graduation-cap.png",
       "sizes": "512x512",
       "type": "image/png"
     }

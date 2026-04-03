@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MessageSquare, Users, User, Send, Plus, Search, ChevronRight, X, LogOut, Settings, Trash2, Edit2, MoreVertical } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import { MessageSquare, Users, User, Search, ChevronRight, X, LogOut, Trash2, Edit2 } from 'lucide-react';
 import { 
   auth, db, googleProvider, signInWithPopup, onAuthStateChanged, 
   collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, 
@@ -8,6 +9,7 @@ import {
   where, getDocs, signOut, updateDoc, deleteDoc, arrayUnion
 } from '../firebase';
 import { GroupChat, DirectChat, Message, UserProfileData } from '../types';
+import MessageBar from './MessageBar';
 
 interface ChatProps {
   onChatActiveChange?: (active: boolean) => void;
@@ -22,6 +24,8 @@ export default function Chat({ onChatActiveChange }: ChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [isSearchingUser, setIsSearchingUser] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -29,10 +33,18 @@ export default function Chat({ onChatActiveChange }: ChatProps) {
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [contextMenuMessage, setContextMenuMessage] = useState<Message | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const scrollRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     onChatActiveChange?.(!!selectedChat);
+    return () => onChatActiveChange?.(false);
   }, [selectedChat, onChatActiveChange]);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -90,21 +102,35 @@ export default function Chat({ onChatActiveChange }: ChatProps) {
       where('participants', 'array-contains', user.uid),
       orderBy('updatedAt', 'desc')
     );
+
     const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const d = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() } as DirectChat))
-        .filter(chat => !chat.deletedBy?.includes(user.uid));
-      
-      const directsWithUsers = await Promise.all(d.map(async chat => {
-        const otherUserId = chat.participants.find(id => id !== user.uid);
-        if (otherUserId) {
-          const userDoc = await getDoc(doc(db, 'users', otherUserId));
-          return { ...chat, otherUser: userDoc.data() as UserProfileData };
+      try {
+        const d = snapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() } as DirectChat))
+          .filter(chat => !chat.deletedBy?.includes(user.uid));
+        
+        // Use a local variable to avoid stale closures in the async map
+        const currentUserId = user.uid;
+        
+        const directsWithUsers = await Promise.all(d.map(async chat => {
+          const otherUserId = chat.participants.find(id => id !== currentUserId);
+          if (otherUserId) {
+            const userRef = doc(db, 'users', otherUserId);
+            const userDoc = await getDoc(userRef);
+            if (userDoc.exists()) {
+              return { ...chat, otherUser: userDoc.data() as UserProfileData };
+            }
+          }
+          return chat;
+        }));
+        
+        // Only update if we are still on the same user
+        if (auth.currentUser?.uid === currentUserId) {
+          setDirects(directsWithUsers);
         }
-        return chat;
-      }));
-      
-      setDirects(directsWithUsers);
+      } catch (err) {
+        console.error("Error processing direct chats:", err);
+      }
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'direct_chats'));
     return unsubscribe;
   }, [user?.uid]);
@@ -124,8 +150,7 @@ export default function Chat({ onChatActiveChange }: ChatProps) {
     return unsubscribe;
   }, [selectedChat?.id, selectedChat?.type, user?.uid]);
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSendMessage = React.useCallback(async () => {
     if (!newMessage.trim() || !selectedChat || !user) return;
 
     const path = selectedChat.type === 'group' 
@@ -160,9 +185,9 @@ export default function Chat({ onChatActiveChange }: ChatProps) {
     } catch (err) {
       handleFirestoreError(err, editingMessage ? OperationType.UPDATE : OperationType.CREATE, path);
     }
-  };
+  }, [newMessage, selectedChat, user, editingMessage]);
 
-  const deleteMessage = async (messageId: string) => {
+  const deleteMessage = React.useCallback(async (messageId: string) => {
     if (!selectedChat || !user) return;
     const path = selectedChat.type === 'group' 
       ? `groups/${selectedChat.id}/messages` 
@@ -174,14 +199,14 @@ export default function Chat({ onChatActiveChange }: ChatProps) {
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, path);
     }
-  };
+  }, [selectedChat, user]);
 
-  const deleteChat = () => {
+  const deleteChat = React.useCallback(() => {
     if (!selectedChat || !user) return;
     setShowDeleteConfirm(true);
-  };
+  }, [selectedChat, user]);
 
-  const confirmDeleteChat = async () => {
+  const confirmDeleteChat = React.useCallback(async () => {
     if (!selectedChat || !user) return;
     
     const chatPath = selectedChat.type === 'group' ? 'groups' : 'direct_chats';
@@ -216,17 +241,25 @@ export default function Chat({ onChatActiveChange }: ChatProps) {
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, chatPath);
     }
-  };
+  }, [selectedChat, user]);
 
-  const handleLogin = async () => {
+  const handleLogin = React.useCallback(async () => {
+    if (loginLoading) return;
+    setLoginLoading(true);
+    setLoginError(null);
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Login failed", err);
+      if (err.code !== 'auth/cancelled-popup-request') {
+        setLoginError(err.message);
+      }
+    } finally {
+      setLoginLoading(false);
     }
-  };
+  }, [loginLoading]);
 
-  const handleLogout = async () => {
+  const handleLogout = React.useCallback(async () => {
     try {
       await signOut(auth);
       setUser(null);
@@ -235,60 +268,38 @@ export default function Chat({ onChatActiveChange }: ChatProps) {
     } catch (err) {
       console.error("Logout failed", err);
     }
-  };
+  }, []);
 
-  // Fetch users for search when search is opened
+  // Real-time User Search
   useEffect(() => {
     if (!isSearchingUser || !user?.uid) return;
     
-    const fetchInitialUsers = async () => {
+    const performSearch = async () => {
       try {
-        const q = query(collection(db, 'users'), limit(50));
+        const term = searchQuery.toLowerCase().trim();
+        const q = query(collection(db, 'users'), limit(100));
         const snapshot = await getDocs(q);
-        const results = snapshot.docs
-          .map(doc => doc.data() as UserProfileData)
-          .filter(u => u.uid !== user.uid);
-        setSearchResults(results);
+        const allUsers = snapshot.docs.map(doc => doc.data() as UserProfileData);
+        
+        if (!term) {
+          setSearchResults(allUsers.filter(u => u.uid !== user.uid).slice(0, 50));
+          return;
+        }
+
+        const filtered = allUsers.filter(u => 
+          u.uid !== user.uid && 
+          (u.email.toLowerCase().includes(term) || u.name.toLowerCase().includes(term))
+        );
+        
+        setSearchResults(filtered);
       } catch (err) {
-        console.error("Error fetching users:", err);
+        console.error("Error searching users:", err);
       }
     };
     
-    fetchInitialUsers();
-  }, [isSearchingUser, user?.uid]);
-
-  const searchUsers = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
-    
-    if (!searchQuery.trim()) {
-      // If empty, reset to initial list
-      const q = query(collection(db, 'users'), limit(50));
-      const snapshot = await getDocs(q);
-      const results = snapshot.docs
-        .map(doc => doc.data() as UserProfileData)
-        .filter(u => u.uid !== user.uid);
-      setSearchResults(results);
-      return;
-    }
-    
-    try {
-      // Search by email or name (client-side filtering for better UX with small datasets)
-      const q = query(collection(db, 'users'), limit(100));
-      const snapshot = await getDocs(q);
-      const allUsers = snapshot.docs.map(doc => doc.data() as UserProfileData);
-      
-      const term = searchQuery.toLowerCase().trim();
-      const filtered = allUsers.filter(u => 
-        u.uid !== user.uid && 
-        (u.email.toLowerCase().includes(term) || u.name.toLowerCase().includes(term))
-      );
-      
-      setSearchResults(filtered);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.LIST, 'users');
-    }
-  };
+    const timeoutId = setTimeout(performSearch, 300);
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, isSearchingUser, user?.uid]);
 
   const startDirectChat = async (otherUser: UserProfileData) => {
     if (!user) return;
@@ -326,10 +337,17 @@ export default function Chat({ onChatActiveChange }: ChatProps) {
         <p className="text-slate-500 dark:text-slate-400 mb-8">Sign in with Google to start chatting with other students.</p>
         <button
           onClick={handleLogin}
-          className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-bold shadow-lg shadow-indigo-200 dark:shadow-none active:scale-95 transition-all"
+          disabled={loginLoading}
+          className={`${loginLoading ? 'bg-indigo-400' : 'bg-indigo-600'} text-white px-8 py-4 rounded-2xl font-bold shadow-lg shadow-indigo-200 dark:shadow-none active:scale-95 transition-all flex items-center gap-2`}
         >
-          Sign in with Google
+          {loginLoading && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+          {loginLoading ? 'Signing in...' : 'Sign in with Google'}
         </button>
+        {loginError && (
+          <p className="mt-4 text-xs text-rose-500 font-medium bg-rose-50 dark:bg-rose-900/20 px-4 py-2 rounded-xl border border-rose-100 dark:border-rose-800/50">
+            {loginError}
+          </p>
+        )}
       </div>
     );
   }
@@ -377,9 +395,6 @@ export default function Chat({ onChatActiveChange }: ChatProps) {
           {/* Chat Header */}
           <div className="bg-white dark:bg-slate-800 p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <button onClick={() => setSelectedChat(null)} className="p-2 text-slate-400">
-                <ChevronRight className="rotate-180" size={24} />
-              </button>
               <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold">
                 {selectedChat.name[0].toUpperCase()}
               </div>
@@ -401,7 +416,7 @@ export default function Chat({ onChatActiveChange }: ChatProps) {
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 relative">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0 p-4 space-y-4 relative">
             {messages.map((msg) => (
               <MessageItem 
                 key={msg.id}
@@ -506,31 +521,22 @@ export default function Chat({ onChatActiveChange }: ChatProps) {
           </div>
 
           {/* Input */}
-          <form onSubmit={handleSendMessage} className="p-4 pb-4 bg-white dark:bg-slate-800 border-t border-slate-100 dark:border-slate-700 flex flex-col gap-2">
+          <div className="flex flex-col">
             {editingMessage && (
-              <div className="flex items-center justify-between bg-indigo-50 dark:bg-indigo-900/20 px-3 py-1 rounded-lg mb-1">
-                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">Editing Message</span>
+              <div className="px-4 py-2 bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-between border-t border-slate-100 dark:border-slate-700">
+                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">Editing Message</span>
                 <button type="button" onClick={() => { setEditingMessage(null); setNewMessage(''); }} className="text-indigo-600">
                   <X size={14} />
                 </button>
               </div>
             )}
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Type a message..."
-                className="flex-1 bg-slate-50 dark:bg-slate-900 border-none rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 dark:text-slate-100"
-              />
-              <button 
-                type="submit"
-                className="bg-indigo-600 text-white p-2 rounded-xl active:scale-95 transition-transform"
-              >
-                <Send size={20} />
-              </button>
-            </div>
-          </form>
+            <MessageBar
+              value={newMessage}
+              onChange={setNewMessage}
+              onSend={handleSendMessage}
+              placeholder="Type a message..."
+            />
+          </div>
         </div>
       ) : (
         <div className="flex flex-col h-full">
@@ -608,22 +614,19 @@ export default function Chat({ onChatActiveChange }: ChatProps) {
                         <X size={18} />
                       </button>
                     </div>
-                    <form onSubmit={searchUsers} className="flex gap-2">
-                      <input 
-                        autoFocus
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Search by name or email..."
-                        className="flex-1 bg-slate-50 dark:bg-slate-900 border-none rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 dark:text-slate-100"
-                      />
-                      <button 
-                        type="submit"
-                        className="bg-indigo-600 text-white p-2 rounded-xl active:scale-95 transition-transform"
-                      >
-                        <Search size={20} />
-                      </button>
-                    </form>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input 
+                          autoFocus
+                          type="text"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          placeholder="Search by name or email..."
+                          className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 dark:text-slate-100"
+                        />
+                      </div>
+                    </div>
                     
                     <div className="space-y-2 max-h-40 overflow-y-auto">
                       {searchResults.map(res => (
@@ -697,6 +700,12 @@ const ChatListItem = React.memo(({ title, subtitle, photo, onClick }: { title: s
 const MessageItem = React.memo(({ msg, isOwn, isSystem, onLongPress }: { msg: Message, isOwn: boolean, isSystem?: boolean, onLongPress: () => void }) => {
   const [pressTimer, setPressTimer] = useState<NodeJS.Timeout | null>(null);
 
+  const formatTime = (timestamp: any) => {
+    if (!timestamp) return '';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
   const handleTouchStart = () => {
     if (isSystem) return;
     const timer = setTimeout(() => {
@@ -746,8 +755,15 @@ const MessageItem = React.memo(({ msg, isOwn, isSystem, onLongPress }: { msg: Me
             ? 'bg-indigo-600 text-white rounded-tr-none' 
             : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-tl-none border border-slate-100 dark:border-slate-700'
         }`}>
-          {msg.text}
+          <div className="prose prose-sm dark:prose-invert max-w-none break-words">
+            <ReactMarkdown>
+              {msg.text}
+            </ReactMarkdown>
+          </div>
         </div>
+        <span className={`text-[9px] font-bold text-slate-400 mt-1 px-1 ${isOwn ? 'text-right' : 'text-left'}`}>
+          {formatTime(msg.timestamp)}
+        </span>
       </div>
     </div>
   );

@@ -140,6 +140,13 @@ export default function App() {
     } catch (err: any) {
       console.error('Login error:', err);
       
+      let errorMessage = err.message;
+      if (err.code === 'auth/unauthorized-domain') {
+        errorMessage = "Domain not authorized. Please add 'stardesk.app' to your Firebase Console > Authentication > Settings > Authorized Domains.";
+      } else if (err.message?.toLowerCase().includes('localhost')) {
+        errorMessage = "Redirect error. Please ensure you have added 'stardesk.app' to Firebase Authorized Domains and rebuilt the APK.";
+      }
+      
       // Fallback logic for web popups
       if (!isNative && (err.code === 'auth/popup-blocked' || err.code === 'auth/operation-not-supported-in-this-environment' || err.message?.toLowerCase().includes('popup'))) {
         console.log('Popup failed, falling back to redirect...');
@@ -152,7 +159,7 @@ export default function App() {
           setLoginLoading(false);
         }
       } else if (err.code !== 'auth/cancelled-popup-request') {
-        setLoginError(`Login Error: ${err.message}`);
+        setLoginError(`Login Error: ${errorMessage}`);
         setLoginLoading(false);
       } else {
         setLoginLoading(false);

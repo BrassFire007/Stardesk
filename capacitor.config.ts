@@ -5,7 +5,8 @@ const config: CapacitorConfig = {
   appName: 'Stardesk',
   webDir: 'dist',
   server: {
-    androidScheme: 'https'
+    androidScheme: 'https',
+    hostname: 'stardesk.app'
   }
 };
 

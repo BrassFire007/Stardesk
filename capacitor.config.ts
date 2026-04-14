@@ -9,7 +9,9 @@ const config: CapacitorConfig = {
     allowNavigation: [
       'gen-lang-client-0556493295.firebaseapp.com',
       '*.firebaseapp.com',
-      '*.googleapis.com'
+      '*.googleapis.com',
+      '*.google.com',
+      '*.gstatic.com'
     ]
   }
 };

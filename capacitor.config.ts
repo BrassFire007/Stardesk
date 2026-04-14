@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: {
     androidScheme: 'https',
-    hostname: 'stardesk.app'
+    hostname: 'gen-lang-client-0556493295.firebaseapp.com'
   }
 };
 

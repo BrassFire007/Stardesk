@@ -142,9 +142,9 @@ export default function App() {
       
       let errorMessage = err.message;
       if (err.code === 'auth/unauthorized-domain') {
-        errorMessage = "Domain not authorized. Please add 'stardesk.app' to your Firebase Console > Authentication > Settings > Authorized Domains.";
+        errorMessage = "Domain not authorized. Please check your Firebase Console Authorized Domains.";
       } else if (err.message?.toLowerCase().includes('localhost')) {
-        errorMessage = "Redirect error. Please ensure you have added 'stardesk.app' to Firebase Authorized Domains and rebuilt the APK.";
+        errorMessage = "Redirect error. Please rebuild the APK.";
       }
       
       // Fallback logic for web popups

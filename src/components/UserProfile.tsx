@@ -68,6 +68,13 @@ export default function UserProfile() {
     } catch (err: any) {
       console.error('Login error:', err);
       
+      let errorMessage = err.message;
+      if (err.code === 'auth/unauthorized-domain') {
+        errorMessage = "Domain not authorized. Please check your Firebase Console Authorized Domains.";
+      } else if (err.message?.toLowerCase().includes('localhost')) {
+        errorMessage = "Redirect error. Please rebuild the APK.";
+      }
+      
       if (!isNative && (err.code === 'auth/popup-blocked' || err.code === 'auth/operation-not-supported-in-this-environment' || err.message?.toLowerCase().includes('popup'))) {
         setLoginError("Popup blocked. Trying redirect...");
         try {
@@ -78,7 +85,7 @@ export default function UserProfile() {
           setLoginLoading(false);
         }
       } else if (err.code !== 'auth/cancelled-popup-request') {
-        setLoginError(`Login Error: ${err.message}`);
+        setLoginError(`Login Error: ${errorMessage}`);
         setLoginLoading(false);
       } else {
         setLoginLoading(false);

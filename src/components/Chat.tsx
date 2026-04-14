@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { MessageSquare, Users, User, Search, ChevronRight, X, LogOut, Trash2, Edit2 } from 'lucide-react';
 import { 
-  auth, db, googleProvider, signInWithPopup, onAuthStateChanged, 
+  auth, db, googleProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, 
   collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, 
   doc, setDoc, getDoc, handleFirestoreError, OperationType, FirebaseUser,
   where, getDocs, signOut, updateDoc, deleteDoc, arrayUnion
@@ -247,15 +248,33 @@ export default function Chat({ onChatActiveChange }: ChatProps) {
     if (loginLoading) return;
     setLoginLoading(true);
     setLoginError(null);
+    
+    const isNative = Capacitor.isNativePlatform();
+    
     try {
-      await signInWithPopup(auth, googleProvider);
+      if (isNative) {
+        await signInWithRedirect(auth, googleProvider);
+      } else {
+        await signInWithPopup(auth, googleProvider);
+      }
     } catch (err: any) {
       console.error("Login failed", err);
-      if (err.code !== 'auth/cancelled-popup-request') {
-        setLoginError(err.message);
+      
+      if (!isNative && (err.code === 'auth/popup-blocked' || err.code === 'auth/operation-not-supported-in-this-environment' || err.message?.toLowerCase().includes('popup'))) {
+        setLoginError("Popup blocked. Trying redirect...");
+        try {
+          await signInWithRedirect(auth, googleProvider);
+        } catch (redirectErr: any) {
+          console.error('Redirect error:', redirectErr);
+          setLoginError(`Redirect Error: ${redirectErr.message}`);
+          setLoginLoading(false);
+        }
+      } else if (err.code !== 'auth/cancelled-popup-request') {
+        setLoginError(`Login Error: ${err.message}`);
+        setLoginLoading(false);
+      } else {
+        setLoginLoading(false);
       }
-    } finally {
-      setLoginLoading(false);
     }
   }, [loginLoading]);
 

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { User as UserIcon, Camera, Trophy, Calendar, Award, LogOut, Moon, Sun, LogIn } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Exam } from '../types';
-import { auth, db, onAuthStateChanged, FirebaseUser, signInWithPopup, googleProvider, signOut, collection, query, orderBy, onSnapshot, handleFirestoreError, OperationType } from '../firebase';
+import { auth, db, onAuthStateChanged, FirebaseUser, signInWithPopup, signInWithRedirect, getRedirectResult, googleProvider, signOut, collection, query, orderBy, onSnapshot, handleFirestoreError, OperationType } from '../firebase';
 
 export default function UserProfile() {
   const [user, setUser] = useState<FirebaseUser | null>(auth.currentUser);
@@ -55,14 +56,33 @@ export default function UserProfile() {
     if (loginLoading) return;
     setLoginLoading(true);
     setLoginError(null);
+    
+    const isNative = Capacitor.isNativePlatform();
+    
     try {
-      await signInWithPopup(auth, googleProvider);
+      if (isNative) {
+        await signInWithRedirect(auth, googleProvider);
+      } else {
+        await signInWithPopup(auth, googleProvider);
+      }
     } catch (err: any) {
       console.error('Login error:', err);
-      if (err.code !== 'auth/cancelled-popup-request') {
-        setLoginError(err.message);
+      
+      if (!isNative && (err.code === 'auth/popup-blocked' || err.code === 'auth/operation-not-supported-in-this-environment' || err.message?.toLowerCase().includes('popup'))) {
+        setLoginError("Popup blocked. Trying redirect...");
+        try {
+          await signInWithRedirect(auth, googleProvider);
+        } catch (redirectErr: any) {
+          console.error('Redirect error:', redirectErr);
+          setLoginError(`Redirect Error: ${redirectErr.message}`);
+          setLoginLoading(false);
+        }
+      } else if (err.code !== 'auth/cancelled-popup-request') {
+        setLoginError(`Login Error: ${err.message}`);
+        setLoginLoading(false);
+      } else {
+        setLoginLoading(false);
       }
-      setLoginLoading(false);
     }
   };
 

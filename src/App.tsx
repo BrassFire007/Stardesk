@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { Capacitor } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
 import { 
   BookOpen, 
@@ -21,7 +22,7 @@ import {
   MessageSquare,
   LogIn
 } from 'lucide-react';
-import { auth, db, onAuthStateChanged, FirebaseUser, signInWithPopup, googleProvider, doc, setDoc, serverTimestamp, handleFirestoreError, OperationType } from './firebase';
+import { auth, db, onAuthStateChanged, FirebaseUser, signInWithPopup, signInWithRedirect, getRedirectResult, googleProvider, doc, setDoc, serverTimestamp, handleFirestoreError, OperationType } from './firebase';
 import HomeworkTracker from './components/HomeworkTracker';
 import PomodoroTimer from './components/PomodoroTimer';
 import ExamTracker from './components/ExamTracker';
@@ -78,7 +79,28 @@ export default function App() {
 
   // Sync user profile to Firestore
   useEffect(() => {
+    const isNative = Capacitor.isNativePlatform();
+    console.log('App started. Platform:', isNative ? 'Native' : 'Web');
+
+    // Check for redirect result on app load
+    getRedirectResult(auth).then((result) => {
+      if (result?.user) {
+        console.log('Redirect login successful:', result.user.email);
+        setLoginLoading(false);
+      } else {
+        console.log('No redirect result found.');
+      }
+    }).catch((error) => {
+      console.error("Redirect login error:", error);
+      // Only show error if it's not a common "no result" error
+      if (error.code !== 'auth/no-recent-redirect-any-more') {
+        setLoginError(`Redirect Error: ${error.message}`);
+      }
+      setLoginLoading(false);
+    });
+
     const unsubscribe = onAuthStateChanged(auth, (u) => {
+      console.log('Auth state changed:', u ? u.email : 'Signed out');
       setUser(u);
       setAuthLoading(false);
       if (u) {
@@ -104,14 +126,37 @@ export default function App() {
     if (loginLoading) return;
     setLoginLoading(true);
     setLoginError(null);
+    
+    const isNative = Capacitor.isNativePlatform();
+    
     try {
-      await signInWithPopup(auth, googleProvider);
+      if (isNative) {
+        console.log('Native platform detected, using redirect for login...');
+        await signInWithRedirect(auth, googleProvider);
+      } else {
+        console.log('Web platform detected, attempting popup login...');
+        await signInWithPopup(auth, googleProvider);
+      }
     } catch (err: any) {
       console.error('Login error:', err);
-      if (err.code !== 'auth/cancelled-popup-request') {
-        setLoginError(err.message);
+      
+      // Fallback logic for web popups
+      if (!isNative && (err.code === 'auth/popup-blocked' || err.code === 'auth/operation-not-supported-in-this-environment' || err.message?.toLowerCase().includes('popup'))) {
+        console.log('Popup failed, falling back to redirect...');
+        setLoginError("Popup blocked. Trying redirect...");
+        try {
+          await signInWithRedirect(auth, googleProvider);
+        } catch (redirectErr: any) {
+          console.error('Redirect error:', redirectErr);
+          setLoginError(`Redirect Error: ${redirectErr.message}`);
+          setLoginLoading(false);
+        }
+      } else if (err.code !== 'auth/cancelled-popup-request') {
+        setLoginError(`Login Error: ${err.message}`);
+        setLoginLoading(false);
+      } else {
+        setLoginLoading(false);
       }
-      setLoginLoading(false);
     }
   };
 
@@ -333,7 +378,7 @@ export default function App() {
         </header>
 
         {/* Main Content Area */}
-        <main className={`flex-1 flex flex-col min-h-0 ${!isChatActive ? 'pb-24' : 'overflow-hidden'}`}>
+        <main className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
           <PullToRefresh onRefresh={handleRefresh} disabled={isChatActive}>
             <AnimatePresence mode="wait">
               <motion.div
@@ -342,7 +387,7 @@ export default function App() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
                 transition={{ type: "spring", damping: 25, stiffness: 200 }}
-                className="flex-1 flex flex-col min-h-0"
+                className="flex-1 flex flex-col min-h-0 overflow-x-hidden"
               >
                 {!isChatActive && currentView !== 'doubt' && currentView !== 'chat' && (
                   <div className="px-6 pt-4 flex items-center justify-between">

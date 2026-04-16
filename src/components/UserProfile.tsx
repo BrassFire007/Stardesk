@@ -4,7 +4,7 @@ import { User as UserIcon, Camera, Trophy, Calendar, Award, LogOut, Moon, Sun, L
 import { motion, AnimatePresence } from 'motion/react';
 import { Exam } from '../types';
 import { auth, db, onAuthStateChanged, FirebaseUser, signInWithPopup, signInWithRedirect, getRedirectResult, googleProvider, signOut, collection, query, orderBy, onSnapshot, handleFirestoreError, OperationType, signInWithCredential, GoogleAuthProvider } from '../firebase';
-import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
+import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 
 export default function UserProfile() {
   const [user, setUser] = useState<FirebaseUser | null>(auth.currentUser);
@@ -62,9 +62,13 @@ export default function UserProfile() {
     
     try {
       if (isNative) {
-        const googleUser = await GoogleAuth.signIn();
-        const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
-        await signInWithCredential(auth, credential);
+        const result = await FirebaseAuthentication.signInWithGoogle();
+        if (result.credential?.idToken) {
+          const credential = GoogleAuthProvider.credential(result.credential.idToken);
+          await signInWithCredential(auth, credential);
+        } else {
+          throw new Error('No ID token returned from Google Sign-In');
+        }
       } else {
         await signInWithPopup(auth, googleProvider);
       }

@@ -9,7 +9,7 @@ import {
   doc, setDoc, getDoc, handleFirestoreError, OperationType, FirebaseUser,
   where, getDocs, signOut, updateDoc, deleteDoc, arrayUnion, signInWithCredential, GoogleAuthProvider
 } from '../firebase';
-import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
+import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { GroupChat, DirectChat, Message, UserProfileData } from '../types';
 import MessageBar from './MessageBar';
 
@@ -254,9 +254,13 @@ export default function Chat({ onChatActiveChange }: ChatProps) {
     
     try {
       if (isNative) {
-        const googleUser = await GoogleAuth.signIn();
-        const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
-        await signInWithCredential(auth, credential);
+        const result = await FirebaseAuthentication.signInWithGoogle();
+        if (result.credential?.idToken) {
+          const credential = GoogleAuthProvider.credential(result.credential.idToken);
+          await signInWithCredential(auth, credential);
+        } else {
+          throw new Error('No ID token returned from Google Sign-In');
+        }
       } else {
         await signInWithPopup(auth, googleProvider);
       }

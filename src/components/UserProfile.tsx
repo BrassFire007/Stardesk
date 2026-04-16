@@ -3,7 +3,8 @@ import { Capacitor } from '@capacitor/core';
 import { User as UserIcon, Camera, Trophy, Calendar, Award, LogOut, Moon, Sun, LogIn } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Exam } from '../types';
-import { auth, db, onAuthStateChanged, FirebaseUser, signInWithPopup, signInWithRedirect, getRedirectResult, googleProvider, signOut, collection, query, orderBy, onSnapshot, handleFirestoreError, OperationType } from '../firebase';
+import { auth, db, onAuthStateChanged, FirebaseUser, signInWithPopup, signInWithRedirect, getRedirectResult, googleProvider, signOut, collection, query, orderBy, onSnapshot, handleFirestoreError, OperationType, signInWithCredential, GoogleAuthProvider } from '../firebase';
+import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 
 export default function UserProfile() {
   const [user, setUser] = useState<FirebaseUser | null>(auth.currentUser);
@@ -61,7 +62,9 @@ export default function UserProfile() {
     
     try {
       if (isNative) {
-        await signInWithRedirect(auth, googleProvider);
+        const googleUser = await GoogleAuth.signIn();
+        const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
+        await signInWithCredential(auth, credential);
       } else {
         await signInWithPopup(auth, googleProvider);
       }

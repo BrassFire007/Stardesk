@@ -5,15 +5,15 @@ const config: CapacitorConfig = {
   appName: 'Stardesk',
   webDir: 'dist',
   server: {
-    androidScheme: 'https',
-    allowNavigation: [
-      'gen-lang-client-0556493295.firebaseapp.com',
-      '*.firebaseapp.com',
-      '*.googleapis.com',
-      '*.google.com',
-      '*.gstatic.com'
-    ]
-  }
+    androidScheme: 'https'
+  },
+  plugins: {
+    GoogleAuth: {
+      scopes: ['profile', 'email'],
+      serverClientId: 'REPLACE_ME_WITH_YOUR_WEB_CLIENT_ID.apps.googleusercontent.com',
+      forceCodeForRefreshToken: true,
+    },
+  },
 };
 
 export default config;

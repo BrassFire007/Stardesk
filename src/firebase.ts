@@ -1,7 +1,14 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, User as FirebaseUser, signOut, setPersistence, indexedDBLocalPersistence, browserLocalPersistence } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, User as FirebaseUser, signOut, setPersistence, indexedDBLocalPersistence, browserLocalPersistence, signInWithCredential } from 'firebase/auth';
 import { initializeFirestore, doc, getDoc, setDoc, collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, Timestamp, where, getDocs, updateDoc, deleteDoc, arrayUnion } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
+
+// ============================================================================
+// ⚠️ NATIVE GOOGLE LOGIN CONFIGURATION REQUIRED ⚠️
+// To make Google Login work on Android, you MUST provide your Web Client ID.
+// See the AI assistant's message for instructions on how to get this.
+// ============================================================================
+export const GOOGLE_WEB_CLIENT_ID = 'REPLACE_ME_WITH_YOUR_WEB_CLIENT_ID.apps.googleusercontent.com';
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -75,5 +82,5 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-export { signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, doc, getDoc, setDoc, collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, Timestamp, where, getDocs, signOut, updateDoc, deleteDoc, arrayUnion };
+export { signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, doc, getDoc, setDoc, collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, Timestamp, where, getDocs, signOut, updateDoc, deleteDoc, arrayUnion, signInWithCredential, GoogleAuthProvider };
 export type { FirebaseUser };

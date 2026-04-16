@@ -22,7 +22,8 @@ import {
   MessageSquare,
   LogIn
 } from 'lucide-react';
-import { auth, db, onAuthStateChanged, FirebaseUser, signInWithPopup, signInWithRedirect, getRedirectResult, googleProvider, doc, setDoc, serverTimestamp, handleFirestoreError, OperationType } from './firebase';
+import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
+import { auth, db, onAuthStateChanged, FirebaseUser, signInWithPopup, signInWithRedirect, getRedirectResult, googleProvider, doc, setDoc, serverTimestamp, handleFirestoreError, OperationType, signInWithCredential, GoogleAuthProvider, GOOGLE_WEB_CLIENT_ID } from './firebase';
 import HomeworkTracker from './components/HomeworkTracker';
 import PomodoroTimer from './components/PomodoroTimer';
 import ExamTracker from './components/ExamTracker';
@@ -82,6 +83,14 @@ export default function App() {
     const isNative = Capacitor.isNativePlatform();
     console.log('App started. Platform:', isNative ? 'Native' : 'Web');
 
+    if (isNative) {
+      GoogleAuth.initialize({
+        clientId: GOOGLE_WEB_CLIENT_ID,
+        scopes: ['profile', 'email'],
+        grantOfflineAccess: true,
+      });
+    }
+
     // Check for redirect result on app load
     getRedirectResult(auth).then((result) => {
       if (result?.user) {
@@ -131,8 +140,10 @@ export default function App() {
     
     try {
       if (isNative) {
-        console.log('Native platform detected, using redirect for login...');
-        await signInWithRedirect(auth, googleProvider);
+        console.log('Native platform detected, using Capacitor GoogleAuth...');
+        const googleUser = await GoogleAuth.signIn();
+        const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
+        await signInWithCredential(auth, credential);
       } else {
         console.log('Web platform detected, attempting popup login...');
         await signInWithPopup(auth, googleProvider);

@@ -7,8 +7,9 @@ import {
   auth, db, googleProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, 
   collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, 
   doc, setDoc, getDoc, handleFirestoreError, OperationType, FirebaseUser,
-  where, getDocs, signOut, updateDoc, deleteDoc, arrayUnion
+  where, getDocs, signOut, updateDoc, deleteDoc, arrayUnion, signInWithCredential, GoogleAuthProvider
 } from '../firebase';
+import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { GroupChat, DirectChat, Message, UserProfileData } from '../types';
 import MessageBar from './MessageBar';
 
@@ -253,7 +254,9 @@ export default function Chat({ onChatActiveChange }: ChatProps) {
     
     try {
       if (isNative) {
-        await signInWithRedirect(auth, googleProvider);
+        const googleUser = await GoogleAuth.signIn();
+        const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
+        await signInWithCredential(auth, credential);
       } else {
         await signInWithPopup(auth, googleProvider);
       }

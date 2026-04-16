@@ -8,7 +8,7 @@ import firebaseConfig from '../firebase-applet-config.json';
 // To make Google Login work on Android, you MUST provide your Web Client ID.
 // See the AI assistant's message for instructions on how to get this.
 // ============================================================================
-export const GOOGLE_WEB_CLIENT_ID = 'REPLACE_ME_WITH_YOUR_WEB_CLIENT_ID.apps.googleusercontent.com';
+export const GOOGLE_WEB_CLIENT_ID = '280421462655-s14le5n9gjtduqf7iaqltjr0c99iurnh.apps.googleusercontent.com';
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);

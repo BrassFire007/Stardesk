@@ -26,7 +26,12 @@ export default function DoubtTab({ onBack, onChatActiveChange }: DoubtTabProps) 
   const [error, setError] = useState<string | null>(null);
   const [loadingMessages, setLoadingMessages] = useState(true);
   const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
+  const [shakeSticker, setShakeSticker] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const triggerStickerShake = () => {
+    setShakeSticker(prev => prev + 1);
+  };
 
   useEffect(() => {
     onChatActiveChange?.(true);
@@ -250,6 +255,23 @@ export default function DoubtTab({ onBack, onChatActiveChange }: DoubtTabProps) 
 
         {/* Input */}
       <div className="relative">
+        {/* Coming Soon Sticker */}
+        <div className="absolute top-4 left-0 right-0 flex justify-center z-10 pointer-events-none">
+          <motion.div
+            animate={{ 
+              rotate: -10, 
+              x: shakeSticker % 2 === 0 ? 0 : [-5, 5, -5, 0] 
+            }}
+            transition={{ duration: 0.4 }}
+            className="bg-yellow-400 p-2 rounded-lg shadow-lg border-2 border-yellow-500 transform -rotate-10 pointer-events-auto"
+            onClick={triggerStickerShake}
+          >
+            <p className="text-yellow-900 font-black text-xs uppercase tracking-wider">
+              Gemini Coming Soon!
+            </p>
+          </motion.div>
+        </div>
+
         <AnimatePresence>
           {showAttachmentOptions && (
             <>
@@ -306,14 +328,17 @@ export default function DoubtTab({ onBack, onChatActiveChange }: DoubtTabProps) 
           )}
         </AnimatePresence>
         
-        <MessageBar
-          value={input}
-          onChange={setInput}
-          onSend={handleSubmit}
-          onAttachment={handleAttachmentClick}
-          placeholder="Ask a doubt..."
-          isLoading={isLoading}
-        />
+        <div onClick={triggerStickerShake}>
+          <MessageBar
+            value=""
+            onChange={() => {}}
+            onSend={() => {}}
+            onAttachment={handleAttachmentClick}
+            placeholder="Ask a doubt..."
+            isLoading={false}
+            disabled={true}
+          />
+        </div>
       </div>
     </div>
   );

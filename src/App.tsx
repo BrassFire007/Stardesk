@@ -24,13 +24,15 @@ import {
 } from 'lucide-react';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { auth, db, onAuthStateChanged, FirebaseUser, signInWithPopup, signInWithRedirect, getRedirectResult, googleProvider, doc, setDoc, serverTimestamp, handleFirestoreError, OperationType, signInWithCredential, GoogleAuthProvider, GOOGLE_WEB_CLIENT_ID } from './firebase';
-import HomeworkTracker from './components/HomeworkTracker';
-import PomodoroTimer from './components/PomodoroTimer';
-import ExamTracker from './components/ExamTracker';
-import UserProfile from './components/UserProfile';
-import Chat from './components/Chat';
-import DoubtTab from './components/DoubtTab';
-import DeveloperOptions from './components/DeveloperOptions';
+import { lazy, Suspense } from 'react';
+
+const HomeworkTracker = lazy(() => import('./components/HomeworkTracker'));
+const PomodoroTimer = lazy(() => import('./components/PomodoroTimer'));
+const ExamTracker = lazy(() => import('./components/ExamTracker'));
+const UserProfile = lazy(() => import('./components/UserProfile'));
+const Chat = lazy(() => import('./components/Chat'));
+const DoubtTab = lazy(() => import('./components/DoubtTab'));
+const DeveloperOptions = lazy(() => import('./components/DeveloperOptions'));
 import { PullToRefresh } from './components/PullToRefresh';
 import { View } from './types';
 import { QUOTES } from './constants';
@@ -44,7 +46,7 @@ export default function App() {
     localStorage.setItem('stardesk_last_quote_index', nextIndex.toString());
     return QUOTES[nextIndex];
   });
-  const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('stardesk_theme') === 'dark');
+  const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('stardesk_theme') !== 'light');
   const [devClickCount, setDevClickCount] = useState(0);
   const [isChatActive, setIsChatActive] = useState(false);
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -256,15 +258,30 @@ export default function App() {
                 color="bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400"
                 onClick={() => handleSetView('timer')}
               />
+              <MobileMenuCard 
+                title="Exams" 
+                icon={<Trophy size={28} />}
+                color="bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400"
+                onClick={() => handleSetView('exams')}
+              />
+              <MobileMenuCard 
+                title="Doubt Solver" 
+                icon={<MessageCircleQuestion size={28} />}
+                color="bg-white dark:bg-slate-800 text-purple-600 dark:text-purple-400"
+                onClick={() => handleSetView('doubt')}
+              />
             </div>
             
-            <MobileMenuCard 
-              title="Exam Performance" 
-              icon={<Trophy size={28} />}
-              color="bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400"
-              fullWidth
-              onClick={() => handleSetView('exams')}
-            />
+            <div className="hidden lg:grid grid-cols-2 gap-4">
+              <div className="bg-indigo-50 dark:bg-indigo-900/10 p-6 rounded-3xl border border-indigo-100 dark:border-indigo-800/30">
+                <h4 className="font-bold text-indigo-900 dark:text-indigo-100 mb-2">Study Tip of the Day</h4>
+                <p className="text-sm text-indigo-700 dark:text-indigo-300">Try the Feynman Technique: Explain a concept to someone else (or an imaginary friend) to truly master it.</p>
+              </div>
+              <div className="bg-emerald-50 dark:bg-emerald-900/10 p-6 rounded-3xl border border-emerald-100 dark:border-emerald-800/30">
+                <h4 className="font-bold text-emerald-900 dark:text-emerald-100 mb-2">Productivity Insight</h4>
+                <p className="text-sm text-emerald-700 dark:text-emerald-300">Short breaks every 25 minutes can boost your long-term focus by up to 15%.</p>
+              </div>
+            </div>
 
             <div className="mt-4 p-4 bg-slate-100 dark:bg-slate-800 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 text-center">
               <p className="text-xs text-slate-500 dark:text-slate-400 italic">"{dailyQuote}"</p>
@@ -276,8 +293,8 @@ export default function App() {
 
   return (
     <div className="flex justify-center bg-slate-200 min-h-screen transition-colors duration-300">
-      {/* Mobile Container Emulator */}
-      <div className={`w-full max-w-[450px] bg-[#F8F9FC] dark:bg-slate-900 h-[100dvh] flex flex-col shadow-2xl relative overflow-hidden transition-colors duration-300 ${isDarkMode ? 'dark' : ''}`}>
+      {/* Main App Container */}
+      <div className={`w-full max-w-7xl mx-auto bg-[#F8F9FC] dark:bg-slate-900 h-screen max-h-screen flex flex-col shadow-2xl relative overflow-hidden transition-colors duration-300 pt-[env(safe-area-inset-top,0px)] ${isDarkMode ? 'dark' : ''}`}>
         
         {/* Quote Bottom Sheet */}
         <AnimatePresence>
@@ -295,7 +312,7 @@ export default function App() {
                 animate={{ y: 0 }}
                 exit={{ y: "100%" }}
                 transition={{ type: "spring", damping: 25, stiffness: 200 }}
-                className="relative bg-white dark:bg-slate-800 pt-2 pb-10 px-8 rounded-t-[40px] shadow-2xl w-full max-w-[450px] text-center border-t border-slate-100 dark:border-slate-700"
+                className="relative bg-white dark:bg-slate-800 pt-2 pb-10 px-8 rounded-t-[40px] shadow-2xl w-full max-w-lg mx-auto text-center border-t border-slate-100 dark:border-slate-700"
               >
                 {/* Drag Handle */}
                 <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mt-2 mb-8" />
@@ -397,13 +414,14 @@ export default function App() {
             <AnimatePresence mode="wait">
               <motion.div
                 key={currentView}
-                initial={{ opacity: 0, x: 20 }}
+                initial={{ opacity: 0, x: 15 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ type: "spring", damping: 25, stiffness: 200 }}
-                className="flex-1 flex flex-col min-h-0 overflow-x-hidden"
+                exit={{ opacity: 0, x: -15 }}
+                transition={{ type: "spring", bounce: 0, duration: 0.35 }}
+                style={{ willChange: "transform, opacity" }}
+                className="flex-1 flex flex-col min-h-0"
               >
-                {!isChatActive && currentView !== 'doubt' && currentView !== 'chat' && (
+                {!isChatActive && (
                   <div className="px-6 pt-4 flex items-center justify-between">
                     <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 capitalize">
                       {currentView === 'home' ? 'Dashboard' : currentView}
@@ -422,39 +440,47 @@ export default function App() {
                     )}
                   </div>
                 )}
-                {renderedView}
+                <Suspense fallback={
+                  <div className="flex-1 flex items-center justify-center p-8">
+                    <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin flex-shrink-0"></div>
+                  </div>
+                }>
+                  {renderedView}
+                </Suspense>
               </motion.div>
             </AnimatePresence>
           </PullToRefresh>
         </main>
 
         {/* Bottom Navigation Bar */}
-        {!isChatActive && (
-          <nav className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-lg border-t border-slate-100 dark:border-slate-700 px-6 py-3 flex justify-between items-center z-40 transition-colors">
-            <NavButton 
-              active={currentView === 'home'} 
-              onClick={() => handleSetView('home')} 
-              icon={<Home size={24} />} 
-              label="Home" 
-            />
-            <NavButton 
-              active={currentView === 'chat'} 
-              onClick={() => handleSetView('chat')} 
-              icon={<MessageSquare size={24} />} 
-              label="Chat" 
-            />
-            <NavButton 
-              active={currentView === 'doubt'} 
-              onClick={() => handleSetView('doubt')} 
-              icon={<MessageCircleQuestion size={24} />} 
-              label="Doubt" 
-            />
-            <NavButton 
-              active={currentView === 'profile'} 
-              onClick={() => handleSetView('profile')} 
-              icon={<UserIcon size={24} />} 
-              label="You" 
-            />
+        {!isChatActive && (currentView as any) !== 'chat' && (currentView as any) !== 'doubt' && (
+          <nav className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-lg border-t border-slate-100 dark:border-slate-700 z-40 transition-colors">
+            <div className="max-w-md mx-auto px-6 py-3 pb-[calc(12px+env(safe-area-inset-bottom,0px))] flex justify-between items-center font-sans">
+              <NavButton 
+                active={currentView === 'home'} 
+                onClick={() => handleSetView('home')} 
+                icon={<Home size={24} />} 
+                label="Home" 
+              />
+              <NavButton 
+                active={currentView === 'chat'} 
+                onClick={() => handleSetView('chat')} 
+                icon={<MessageSquare size={24} />} 
+                label="Chat" 
+              />
+              <NavButton 
+                active={currentView === 'doubt'} 
+                onClick={() => handleSetView('doubt')} 
+                icon={<MessageCircleQuestion size={24} />} 
+                label="Doubt" 
+              />
+              <NavButton 
+                active={currentView === 'profile'} 
+                onClick={() => handleSetView('profile')} 
+                icon={<UserIcon size={24} />} 
+                label="You" 
+              />
+            </div>
           </nav>
         )}
       </div>

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
-import { MessageCircleQuestion, AlertCircle, Loader2, Trash2 } from 'lucide-react';
+import { MessageCircleQuestion, AlertCircle, Loader2, Trash2, Camera as CameraIcon, Image as ImageIcon } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import MessageBar from './MessageBar';
 
 interface ChatMessage {
@@ -24,8 +25,8 @@ export default function DoubtTab({ onBack, onChatActiveChange }: DoubtTabProps) 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadingMessages, setLoadingMessages] = useState(true);
+  const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     onChatActiveChange?.(true);
@@ -55,20 +56,49 @@ export default function DoubtTab({ onBack, onChatActiveChange }: DoubtTabProps) 
     }
   }, [messages]);
 
-  const handleCameraClick = React.useCallback(() => {
-    fileInputRef.current?.click();
+  const handleAttachmentClick = React.useCallback(() => {
+    setShowAttachmentOptions(prev => !prev);
   }, []);
 
-  const handleFileChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setSelectedImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+  const takePhoto = async () => {
+    setShowAttachmentOptions(false);
+    try {
+      const image = await Camera.getPhoto({
+        quality: 90,
+        allowEditing: false,
+        resultType: CameraResultType.Base64,
+        source: CameraSource.Camera
+      });
+      if (image.base64String) {
+        setSelectedImage(`data:image/${image.format};base64,${image.base64String}`);
+      }
+    } catch (e: any) {
+      console.error("Camera error:", e);
+      if (e.message !== "User cancelled photos app") {
+        setError("Could not access camera.");
+      }
     }
-  }, []);
+  };
+
+  const choosePhoto = async () => {
+    setShowAttachmentOptions(false);
+    try {
+      const image = await Camera.getPhoto({
+        quality: 90,
+        allowEditing: false,
+        resultType: CameraResultType.Base64,
+        source: CameraSource.Photos
+      });
+      if (image.base64String) {
+        setSelectedImage(`data:image/${image.format};base64,${image.base64String}`);
+      }
+    } catch (e: any) {
+      console.error("Gallery error:", e);
+      if (e.message !== "User cancelled photos app") {
+        setError("Could not access gallery.");
+      }
+    }
+  };
 
   const handleSubmit = React.useCallback(async () => {
     if ((!input.trim() && !selectedImage) || isLoading) return;
@@ -93,7 +123,7 @@ export default function DoubtTab({ onBack, onChatActiveChange }: DoubtTabProps) 
     try {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
-        throw new Error("Gemini service is not configured. Please check your environment.");
+        throw new Error("Gemini API key is missing. Please add your GEMINI_API_KEY in the AI Studio 'Settings > Secrets' panel and rebuild the app.");
       }
 
       const ai = new GoogleGenAI({ apiKey });
@@ -218,15 +248,49 @@ export default function DoubtTab({ onBack, onChatActiveChange }: DoubtTabProps) 
         )}
       </div>
 
-      {/* Input */}
+        {/* Input */}
       <div className="relative">
         <AnimatePresence>
+          {showAttachmentOptions && (
+            <>
+              {/* Invisible backdrop to dismiss popover */}
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-40"
+                onClick={() => setShowAttachmentOptions(false)}
+              />
+              <motion.div
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                className="absolute bottom-full left-4 mb-2 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden z-50 flex flex-col p-1 w-48"
+              >
+                <button 
+                  onClick={takePhoto}
+                  className="w-full text-left px-4 py-3 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-xl transition-colors flex items-center gap-3"
+                >
+                  <CameraIcon size={18} className="text-indigo-600 dark:text-indigo-400" />
+                  Take a photo
+                </button>
+                <button 
+                  onClick={choosePhoto}
+                  className="w-full text-left px-4 py-3 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-xl transition-colors flex items-center gap-3"
+                >
+                  <ImageIcon size={18} className="text-indigo-600 dark:text-indigo-400" />
+                  Choose a file
+                </button>
+              </motion.div>
+            </>
+          )}
+
           {selectedImage && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 10 }}
-              className="absolute bottom-full left-0 right-0 p-4 bg-white dark:bg-slate-800 border-t border-slate-100 dark:border-slate-700 flex items-center gap-3"
+              className="absolute bottom-full left-0 right-0 p-4 bg-white dark:bg-slate-800 border-t border-slate-100 dark:border-slate-700 flex items-center gap-3 z-30"
             >
               <div className="relative w-16 h-16 rounded-xl overflow-hidden shadow-md border border-slate-200 dark:border-slate-600">
                 <img src={selectedImage} alt="Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
@@ -242,20 +306,11 @@ export default function DoubtTab({ onBack, onChatActiveChange }: DoubtTabProps) 
           )}
         </AnimatePresence>
         
-        <input 
-          type="file" 
-          ref={fileInputRef} 
-          onChange={handleFileChange} 
-          accept="image/*" 
-          capture="environment" 
-          className="hidden" 
-        />
-        
         <MessageBar
           value={input}
           onChange={setInput}
           onSend={handleSubmit}
-          onCamera={handleCameraClick}
+          onAttachment={handleAttachmentClick}
           placeholder="Ask a doubt..."
           isLoading={isLoading}
         />

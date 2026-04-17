@@ -226,7 +226,7 @@ export default function UserProfile() {
             <p className="text-slate-400 dark:text-slate-500 text-sm italic">No exams recorded yet.</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {exams.map((exam) => (
               <HistoryItem key={exam.id} exam={exam} />
             ))}

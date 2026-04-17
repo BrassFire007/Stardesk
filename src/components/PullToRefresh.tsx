@@ -99,10 +99,10 @@ export const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, childre
   }, [onRefresh, yRaw, disabled]);
 
   return (
-    <div ref={containerRef} className="flex-1 flex flex-col overflow-y-auto relative min-h-0 overscroll-none">
+    <div ref={containerRef} className="flex-1 flex flex-col overflow-y-auto overflow-x-hidden scrollbar-hide relative min-h-0 overscroll-none">
       <motion.div 
         style={{ y }}
-        className="flex-1 flex flex-col min-h-0"
+        className="flex-1 flex flex-col min-h-0 overflow-x-hidden"
       >
         {/* Refresh Indicator */}
         <div className="absolute top-0 left-0 right-0 flex justify-center pointer-events-none" style={{ transform: 'translateY(-100%)' }}>

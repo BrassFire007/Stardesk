@@ -174,9 +174,9 @@ export default function HomeworkTracker() {
         </div>
       </form>
 
-      <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {loading ? (
-          <div className="flex justify-center py-12">
+          <div className="col-span-full flex justify-center py-12">
             <div className="w-8 h-8 border-4 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin" />
           </div>
         ) : (
@@ -185,7 +185,7 @@ export default function HomeworkTracker() {
               <motion.div 
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="text-center py-12 text-gray-400"
+                className="col-span-full text-center py-12 text-gray-400"
               >
                 <BookOpen size={48} className="mx-auto mb-4 opacity-20" />
                 <p>No homework added yet. Start by adding one above!</p>

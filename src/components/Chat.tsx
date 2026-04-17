@@ -386,346 +386,231 @@ export default function Chat({ onChatActiveChange }: ChatProps) {
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-900">
-      {showProfile ? (
-        <div className="flex flex-col h-full">
-          {/* Profile Header */}
-          <div className="bg-white dark:bg-slate-800 p-4 border-b border-slate-100 dark:border-slate-700 flex items-center gap-3">
-            <button onClick={() => setShowProfile(false)} className="p-2 text-slate-400">
-              <ChevronRight className="rotate-180" size={24} />
-            </button>
-            <h3 className="font-bold text-slate-800 dark:text-slate-100">My Profile</h3>
-          </div>
-
-          {/* Profile Content */}
-          <div className="flex-1 p-6 flex flex-col items-center">
-            <div className="relative mb-6">
-              <img 
-                src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} 
-                alt={user.displayName || ''} 
-                className="w-32 h-32 rounded-[40px] shadow-xl object-cover border-4 border-white dark:border-slate-800"
-                referrerPolicy="no-referrer"
-              />
-              <div className="absolute -bottom-2 -right-2 bg-emerald-500 w-8 h-8 rounded-full border-4 border-white dark:border-slate-800 shadow-sm" />
+    <div className="flex h-full bg-slate-50 dark:bg-slate-900 overflow-hidden">
+      {/* Sidebar for Desktop / List for Mobile */}
+      <div className={`flex flex-col h-full bg-white dark:bg-slate-800 border-r border-slate-100 dark:border-slate-700 transition-all ${
+        selectedChat ? 'hidden lg:flex lg:w-80' : 'w-full lg:w-80'
+      }`}>
+        {showProfile ? (
+          <div className="flex flex-col h-full">
+            <div className="bg-white dark:bg-slate-800 p-4 border-b border-slate-100 dark:border-slate-700 flex items-center gap-3">
+              <button onClick={() => setShowProfile(false)} className="p-2 text-slate-400">
+                <ChevronRight className="rotate-180" size={24} />
+              </button>
+              <h3 className="font-bold text-slate-800 dark:text-slate-100">My Profile</h3>
             </div>
-            
-            <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 mb-1">{user.displayName}</h2>
-            <p className="text-slate-500 dark:text-slate-400 mb-8 font-medium">{user.email}</p>
-
-            <div className="w-full space-y-3">
-              <button 
-                onClick={handleLogout}
-                className="w-full p-4 bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 rounded-2xl font-bold flex items-center justify-center gap-3 active:scale-95 transition-all"
-              >
-                <LogOut size={20} />
+            <div className="flex-1 p-6 flex flex-col items-center">
+              <div className="relative mb-6">
+                <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} alt={user.displayName || ''} className="w-24 h-24 rounded-[32px] shadow-xl object-cover border-4 border-white dark:border-slate-800" referrerPolicy="no-referrer" />
+                <div className="absolute -bottom-1 -right-1 bg-emerald-500 w-6 h-6 rounded-full border-4 border-white dark:border-slate-800" />
+              </div>
+              <h2 className="text-xl font-black text-slate-800 dark:text-slate-100 mb-1">{user.displayName}</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-8 font-medium">{user.email}</p>
+              <button onClick={handleLogout} className="w-full p-3 bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 rounded-xl font-bold flex items-center justify-center gap-3 active:scale-95 transition-all text-sm">
+                <LogOut size={18} />
                 Log Out
               </button>
             </div>
           </div>
-        </div>
-      ) : selectedChat ? (
-        <div className="flex flex-col h-full">
-          {/* Chat Header */}
-          <div className="bg-white dark:bg-slate-800 p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold">
-                {selectedChat.name[0].toUpperCase()}
+        ) : (
+          <div className="flex flex-col h-full">
+            {/* Header */}
+            <div className="p-4 flex justify-between items-center border-b border-slate-50 dark:border-slate-700/50">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white">
+                  <MessageSquare size={18} />
+                </div>
+                <h1 className="font-black text-slate-800 dark:text-slate-100 tracking-tight text-sm">CHATS</h1>
               </div>
-              <div>
-                <h3 className="font-bold text-slate-800 dark:text-slate-100">{selectedChat.name}</h3>
-                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">
-                  {selectedChat.type === 'group' ? 'Group Chat' : 'Direct Message'}
-                </p>
-              </div>
-            </div>
-            {selectedChat.type === 'direct' && (
-              <button 
-                onClick={deleteChat}
-                className="p-2 text-slate-400 hover:text-rose-500 transition-colors"
-              >
-                <Trash2 size={20} />
+              <button onClick={() => setShowProfile(true)} className="w-8 h-8 rounded-lg overflow-hidden border-2 border-slate-100 dark:border-slate-700">
+                <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
               </button>
-            )}
-          </div>
-
-          {/* Messages */}
-          <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0 p-4 space-y-4 relative">
-            {messages.map((msg) => (
-              <MessageItem 
-                key={msg.id}
-                msg={msg}
-                isOwn={msg.senderId === user.uid}
-                isSystem={msg.senderId === 'system'}
-                onLongPress={() => msg.senderId === user.uid && setContextMenuMessage(msg)}
-              />
-            ))}
-            
-            {/* Delete Chat Confirmation Modal */}
-            <AnimatePresence>
-              {showDeleteConfirm && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-6">
-                  <motion.div 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    onClick={() => setShowDeleteConfirm(false)}
-                    className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-                  />
-                  <motion.div 
-                    initial={{ scale: 0.9, opacity: 0, y: 20 }}
-                    animate={{ scale: 1, opacity: 1, y: 0 }}
-                    exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                    className="relative bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl w-full max-w-sm overflow-hidden p-8 text-center"
-                  >
-                    <div className="w-20 h-20 bg-rose-50 dark:bg-rose-900/20 rounded-[28px] flex items-center justify-center mx-auto mb-6">
-                      <Trash2 className="text-rose-600" size={40} />
-                    </div>
-                    <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 mb-2">Delete Chat?</h3>
-                    <p className="text-slate-500 dark:text-slate-400 mb-8 text-sm leading-relaxed">
-                      This chat and all its messages will be permanently deleted. This action cannot be undone.
-                    </p>
-                    <div className="space-y-3">
-                      <button 
-                        onClick={confirmDeleteChat}
-                        className="w-full bg-rose-600 text-white py-4 rounded-2xl font-bold active:scale-95 transition-all shadow-lg shadow-rose-200 dark:shadow-none"
-                      >
-                        Yes, Delete Everything
-                      </button>
-                      <button 
-                        onClick={() => setShowDeleteConfirm(false)}
-                        className="w-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 py-4 rounded-2xl font-bold active:scale-95 transition-all"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </motion.div>
-                </div>
-              )}
-            </AnimatePresence>
-            
-            {/* Context Menu Overlay */}
-            <AnimatePresence>
-              {contextMenuMessage && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-                  <motion.div 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    onClick={() => setContextMenuMessage(null)}
-                    className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
-                  />
-                  <motion.div 
-                    initial={{ scale: 0.9, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0.9, opacity: 0 }}
-                    className="relative bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-xs overflow-hidden"
-                  >
-                    <div className="p-4 border-b border-slate-100 dark:border-slate-700">
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Message Actions</p>
-                    </div>
-                    <button 
-                      onClick={() => {
-                        setEditingMessage(contextMenuMessage);
-                        setNewMessage(contextMenuMessage.text);
-                        setContextMenuMessage(null);
-                      }}
-                      className="w-full p-4 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 text-slate-700 dark:text-slate-200 font-bold transition-colors"
-                    >
-                      <Edit2 size={18} />
-                      Edit Message
-                    </button>
-                    <button 
-                      onClick={() => deleteMessage(contextMenuMessage.id)}
-                      className="w-full p-4 flex items-center gap-3 hover:bg-rose-50 dark:hover:bg-rose-900/20 text-rose-600 font-bold transition-colors"
-                    >
-                      <Trash2 size={18} />
-                      Delete Message
-                    </button>
-                    <button 
-                      onClick={() => setContextMenuMessage(null)}
-                      className="w-full p-4 text-slate-400 font-bold border-t border-slate-100 dark:border-slate-700"
-                    >
-                      Cancel
-                    </button>
-                  </motion.div>
-                </div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* Input */}
-          <div className="flex flex-col">
-            {editingMessage && (
-              <div className="px-4 py-2 bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-between border-t border-slate-100 dark:border-slate-700">
-                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">Editing Message</span>
-                <button type="button" onClick={() => { setEditingMessage(null); setNewMessage(''); }} className="text-indigo-600">
-                  <X size={14} />
-                </button>
-              </div>
-            )}
-            <MessageBar
-              value={newMessage}
-              onChange={setNewMessage}
-              onSend={handleSendMessage}
-              placeholder="Type a message..."
-            />
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-col h-full">
-          {/* Header with Profile Toggle */}
-          <div className="p-4 bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white">
-                <MessageSquare size={18} />
-              </div>
-              <h1 className="font-black text-slate-800 dark:text-slate-100 tracking-tight">STUDENT CHAT</h1>
             </div>
-            <button 
-              onClick={() => setShowProfile(true)}
-              className="w-10 h-10 rounded-xl overflow-hidden border-2 border-slate-100 dark:border-slate-700 active:scale-90 transition-transform"
-            >
-              <img 
-                src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} 
-                alt="Profile" 
-                className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
-              />
-            </button>
-          </div>
 
-          {/* Tabs */}
-          <div className="flex p-4 gap-2">
-            <button
-              onClick={() => setActiveTab('group')}
-              className={`flex-1 py-3 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${
-                activeTab === 'group' 
-                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none' 
-                  : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400'
-              }`}
-            >
-              <Users size={18} />
-              Groups
-            </button>
-            <button
-              onClick={() => setActiveTab('direct')}
-              className={`flex-1 py-3 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${
-                activeTab === 'direct' 
-                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none' 
-                  : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400'
-              }`}
-            >
-              <User size={18} />
-              Direct
-            </button>
-          </div>
+            {/* Tabs */}
+            <div className="flex p-3 gap-1 bg-slate-50/50 dark:bg-slate-900/20">
+              <button
+                onClick={() => setActiveTab('group')}
+                className={`flex-1 py-2 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 ${activeTab === 'group' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors'}`}
+              >
+                <Users size={14} /> Groups
+              </button>
+              <button
+                onClick={() => setActiveTab('direct')}
+                className={`flex-1 py-2 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 ${activeTab === 'direct' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors'}`}
+              >
+                <User size={14} /> Direct
+              </button>
+            </div>
 
-          {/* List */}
-          <div className="flex-1 overflow-y-auto px-4 space-y-3">
-            {activeTab === 'group' ? (
-              <>
-                {groups.map(group => (
+            {/* List */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+              {activeTab === 'group' ? (
+                groups.map(group => (
                   <ChatListItem 
-                    key={group.id}
-                    title={group.name}
-                    subtitle={group.description}
-                    onClick={() => setSelectedChat({ type: 'group', id: group.id, name: group.name })}
+                    key={group.id} 
+                    title={group.name} 
+                    subtitle={group.description} 
+                    active={selectedChat?.id === group.id}
+                    onClick={() => setSelectedChat({ type: 'group', id: group.id, name: group.name })} 
                   />
-                ))}
-              </>
-            ) : (
-              <>
-                {isSearchingUser ? (
-                  <motion.div 
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="p-4 bg-white dark:bg-slate-800 rounded-2xl border border-indigo-200 dark:border-indigo-900/50 space-y-3 shadow-lg shadow-indigo-100 dark:shadow-none"
-                  >
-                    <div className="flex justify-between items-center">
-                      <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100">Find User</h4>
-                      <button type="button" onClick={() => { setIsSearchingUser(false); setSearchResults([]); }} className="text-slate-400">
-                        <X size={18} />
-                      </button>
-                    </div>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                        <input 
-                          autoFocus
-                          type="text"
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          placeholder="Search by name or email..."
-                          className="w-full bg-slate-50 dark:bg-slate-900 border-none rounded-xl pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 dark:text-slate-100"
-                        />
+                ))
+              ) : (
+                <>
+                  {isSearchingUser ? (
+                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-800/30 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-indigo-600 uppercase">Find Student</span>
+                        <button onClick={() => { setIsSearchingUser(false); setSearchResults([]); }}><X size={14} className="text-indigo-400" /></button>
                       </div>
-                    </div>
-                    
-                    <div className="space-y-2 max-h-40 overflow-y-auto">
-                      {searchResults.map(res => (
-                        <button
-                          key={res.uid}
-                          onClick={() => startDirectChat(res)}
-                          className="w-full p-2 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-lg flex items-center gap-3 text-left transition-colors"
-                        >
-                          <img src={res.photoURL} alt={res.name} className="w-8 h-8 rounded-full" referrerPolicy="no-referrer" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{res.name}</p>
-                            <p className="text-[10px] text-slate-400 truncate">{res.email}</p>
-                          </div>
-                        </button>
-                      ))}
-                      {searchQuery && searchResults.length === 0 && (
-                        <p className="text-center text-[10px] text-slate-400 py-2">No users found with this email.</p>
-                      )}
-                    </div>
-                  </motion.div>
-                ) : (
-                  <button 
-                    onClick={() => setIsSearchingUser(true)}
-                    className="w-full p-4 bg-white dark:bg-slate-800 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold text-sm"
-                  >
-                    <Search size={18} />
-                    Find Users
-                  </button>
-                )}
-                {directs.map(chat => (
-                  <ChatListItem 
-                    key={chat.id}
-                    title={chat.otherUser?.name || 'Unknown User'}
-                    subtitle={chat.lastMessage || 'No messages yet'}
-                    photo={chat.otherUser?.photoURL}
-                    onClick={() => setSelectedChat({ type: 'direct', id: chat.id, name: chat.otherUser?.name || 'Unknown User' })}
-                  />
-                ))}
-              </>
-            )}
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-indigo-400" size={14} />
+                        <input autoFocus type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search..." className="w-full bg-white dark:bg-slate-800 border-none rounded-lg pl-8 pr-3 py-1.5 text-xs focus:ring-2 focus:ring-indigo-500/20" />
+                      </div>
+                      <div className="space-y-1 max-h-40 overflow-y-auto">
+                        {searchResults.map(res => (
+                          <button key={res.uid} onClick={() => startDirectChat(res)} className="w-full p-2 hover:bg-white dark:hover:bg-slate-800 rounded-lg flex items-center gap-2 text-left">
+                            <img src={res.photoURL} alt={res.name} className="w-6 h-6 rounded-full" referrerPolicy="no-referrer" />
+                            <div className="min-w-0"><p className="text-xs font-bold truncate dark:text-slate-100">{res.name}</p></div>
+                          </button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <button onClick={() => setIsSearchingUser(true)} className="w-full p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center gap-2 text-indigo-600 text-xs font-bold">
+                      <Search size={14} /> Find Pupils
+                    </button>
+                  )}
+                  {directs.map(chat => (
+                    <ChatListItem 
+                      key={chat.id} 
+                      title={chat.otherUser?.name || 'User'} 
+                      subtitle={chat.lastMessage || 'New connection'} 
+                      photo={chat.otherUser?.photoURL} 
+                      active={selectedChat?.id === chat.id}
+                      onClick={() => setSelectedChat({ type: 'direct', id: chat.id, name: chat.otherUser?.name || 'User' })} 
+                    />
+                  ))}
+                </>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
+
+      {/* Main Chat Area */}
+      <div className={`flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-900 ${!selectedChat ? 'hidden lg:flex lg:items-center lg:justify-center' : 'flex'}`}>
+        {!selectedChat ? (
+          <div className="text-center p-8 opacity-20">
+            <MessageSquare size={64} className="mx-auto mb-4" />
+            <p className="font-bold">Select a conversation to start chatting</p>
+          </div>
+        ) : (
+          <div className="flex flex-col h-full w-full max-w-4xl mx-auto">
+            {/* Header */}
+            <div className="bg-white dark:bg-slate-800 p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <button onClick={() => setSelectedChat(null)} className="lg:hidden p-2 text-slate-400">
+                  <ChevronRight className="rotate-180" size={20} />
+                </button>
+                <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-black text-sm">
+                  {selectedChat.name[0].toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm">{selectedChat.name}</h3>
+                  <div className="flex items-center gap-1.5 leading-none">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Active Now</p>
+                  </div>
+                </div>
+              </div>
+              {selectedChat.type === 'direct' && (
+                <button onClick={deleteChat} className="p-2 text-slate-400 hover:text-rose-500 transition-colors"><Trash2 size={18} /></button>
+              )}
+            </div>
+
+            {/* Messages */}
+            <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+              {messages.map((msg) => (
+                <MessageItem 
+                  key={msg.id} 
+                  msg={msg} 
+                  isOwn={msg.senderId === user.uid} 
+                  isSystem={msg.senderId === 'system'} 
+                  onLongPress={() => msg.senderId === user.uid && setContextMenuMessage(msg)} 
+                />
+              ))}
+            </div>
+
+            {/* Message Bar */}
+            <div className="mt-auto">
+              {editingMessage && (
+                <div className="px-4 py-2 bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-between border-t border-slate-100 dark:border-slate-700">
+                  <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">Editing Message</span>
+                  <button onClick={() => { setEditingMessage(null); setNewMessage(''); }}><X size={14} className="text-indigo-400" /></button>
+                </div>
+              )}
+              <MessageBar value={newMessage} onChange={setNewMessage} onSend={handleSendMessage} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Confirmation & Menus (Same as before but omitted for brevity in search replacement) */}
+      <AnimatePresence>
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowDeleteConfirm(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="relative bg-white dark:bg-slate-800 rounded-[32px] shadow-2xl w-full max-w-sm p-8 text-center">
+              <div className="w-16 h-16 bg-rose-50 dark:bg-rose-900/20 rounded-2xl flex items-center justify-center mx-auto mb-6"><Trash2 className="text-rose-600" size={32} /></div>
+              <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 mb-2">Clear Conversation?</h3>
+              <p className="text-slate-500 dark:text-slate-400 mb-8 text-sm">Everything will be removed. You can't undo this action.</p>
+              <div className="space-y-3">
+                <button onClick={confirmDeleteChat} className="w-full bg-rose-600 text-white py-3.5 rounded-2xl font-bold shadow-lg shadow-rose-100 dark:shadow-none">Delete Permanently</button>
+                <button onClick={() => setShowDeleteConfirm(false)} className="w-full text-slate-400 font-bold text-sm">Dismiss</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {contextMenuMessage && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setContextMenuMessage(null)} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative bg-white dark:bg-slate-800 rounded-[28px] shadow-2xl w-full max-w-[280px] overflow-hidden">
+              <button onClick={() => { setEditingMessage(contextMenuMessage); setNewMessage(contextMenuMessage.text); setContextMenuMessage(null); }} className="w-full p-4 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 text-slate-700 dark:text-slate-200 font-bold text-sm border-b border-slate-50 dark:border-slate-700/50"><Edit2 size={16} /> Edit Message</button>
+              <button onClick={() => deleteMessage(contextMenuMessage.id)} className="w-full p-4 flex items-center gap-3 hover:bg-rose-50 dark:hover:bg-rose-900/20 text-rose-600 font-bold text-sm"><Trash2 size={16} /> Remove Message</button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-const ChatListItem = React.memo(({ title, subtitle, photo, onClick }: { title: string, subtitle: string, photo?: string, onClick: () => void }) => {
+const ChatListItem = React.memo(({ title, subtitle, photo, active, onClick }: { title: string, subtitle: string, photo?: string, active?: boolean, onClick: () => void }) => {
   return (
     <motion.button
       whileTap={{ scale: 0.98 }}
       onClick={onClick}
-      className="w-full p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-4 text-left"
+      className={`w-full p-3 rounded-2xl flex items-center gap-3 text-left transition-all ${
+        active 
+          ? 'bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/30' 
+          : 'bg-white dark:bg-slate-800 border border-transparent shadow-sm hover:border-slate-200 dark:hover:border-slate-700'
+      }`}
     >
-      <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden flex items-center justify-center">
+      <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-700 overflow-hidden flex items-center justify-center shrink-0">
         {photo ? (
           <img src={photo} alt={title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
         ) : (
-          <span className="text-lg font-bold text-slate-400">{title[0].toUpperCase()}</span>
+          <span className="text-sm font-bold text-slate-400">{title[0].toUpperCase()}</span>
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <h4 className="font-bold text-slate-800 dark:text-slate-100 truncate">{title}</h4>
-        <p className="text-xs text-slate-400 dark:text-slate-500 truncate">{subtitle}</p>
+        <h4 className={`text-sm font-bold truncate ${active ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-800 dark:text-slate-100'}`}>{title}</h4>
+        <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate mt-0.5">{subtitle}</p>
       </div>
-      <ChevronRight size={18} className="text-slate-300" />
+      {!active && <ChevronRight size={14} className="text-slate-200" />}
     </motion.button>
   );
 });

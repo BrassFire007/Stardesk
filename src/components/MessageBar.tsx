@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, Camera, Loader2 } from 'lucide-react';
+import { Send, Paperclip, Loader2 } from 'lucide-react';
 
 interface MessageBarProps {
   value: string;
@@ -9,7 +9,7 @@ interface MessageBarProps {
   placeholder?: string;
   disabled?: boolean;
   isLoading?: boolean;
-  onCamera?: () => void;
+  onAttachment?: () => void;
   className?: string;
 }
 
@@ -20,7 +20,7 @@ export const MessageBar: React.FC<MessageBarProps> = ({
   placeholder = "Type a message...",
   disabled = false,
   isLoading = false,
-  onCamera,
+  onAttachment,
   className = ""
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -55,15 +55,15 @@ export const MessageBar: React.FC<MessageBarProps> = ({
     <div className={`p-4 bg-white dark:bg-slate-800 border-t border-slate-100 dark:border-slate-700 transition-colors ${className}`}>
       <div className="max-w-3xl mx-auto flex items-end gap-2 bg-slate-50 dark:bg-slate-900/50 p-2 rounded-[28px] border border-slate-200 dark:border-slate-700 shadow-sm focus-within:shadow-md focus-within:border-indigo-300 dark:focus-within:border-indigo-900/50 transition-all outline-none">
         
-        {/* Camera Button (Optional) */}
-        {onCamera && (
+        {/* Attachment Button (Optional) */}
+        {onAttachment && (
           <motion.button
             whileTap={{ scale: 0.9 }}
             type="button"
-            onClick={onCamera}
+            onClick={onAttachment}
             className="p-2.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors rounded-full hover:bg-white dark:hover:bg-slate-800 shadow-none hover:shadow-sm"
           >
-            <Camera size={20} />
+            <Paperclip size={20} className="rotate-45" />
           </motion.button>
         )}
 

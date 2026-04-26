@@ -345,7 +345,7 @@ export default function App() {
         </AnimatePresence>
 
         {/* Header */}
-        <header className="bg-white dark:bg-slate-800 px-6 pt-10 pb-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-700 transition-colors">
+        <header className="bg-white dark:bg-slate-800 px-6 py-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-700 transition-colors">
           <div className="flex items-center gap-3">
             {currentView !== 'home' && (
               <motion.button
@@ -453,7 +453,7 @@ export default function App() {
         </main>
 
         {/* Bottom Navigation Bar */}
-        {!isChatActive && (currentView as any) !== 'chat' && (currentView as any) !== 'doubt' && (
+        {!isChatActive && (currentView as any) !== 'doubt' && (
           <nav className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-lg border-t border-slate-100 dark:border-slate-700 z-40 transition-colors">
             <div className="max-w-md mx-auto px-6 py-3 pb-[calc(12px+env(safe-area-inset-bottom,0px))] flex justify-between items-center font-sans">
               <NavButton 

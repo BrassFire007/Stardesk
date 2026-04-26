@@ -57,14 +57,20 @@ export default function ExamTracker() {
     const totalNum = parseFloat(total);
     const percentage = (marksNum / totalNum) * 100;
 
-    const newExam: Omit<Exam, 'id'> = {
+    const newExam: any = {
       name,
       date,
       marks: marksNum,
       totalMarks: totalNum,
       percentage: parseFloat(percentage.toFixed(2)),
-      rank: rank ? parseInt(rank) : undefined,
     };
+
+    if (rank) {
+      newExam.rank = parseInt(rank, 10);
+      if (isNaN(newExam.rank)) {
+        delete newExam.rank;
+      }
+    }
 
     if (user) {
       const path = `users/${user.uid}/exams`;

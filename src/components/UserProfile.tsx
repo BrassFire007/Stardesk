@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { User as UserIcon, Camera, Trophy, Calendar, Award, LogOut, Moon, Sun, LogIn } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Exam } from '../types';
 import { auth, db, onAuthStateChanged, FirebaseUser, signInWithPopup, signInWithRedirect, getRedirectResult, googleProvider, signOut, collection, query, orderBy, onSnapshot, handleFirestoreError, OperationType, signInWithCredential, GoogleAuthProvider } from '../firebase';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
@@ -33,18 +34,33 @@ export default function UserProfile() {
       return;
     }
 
+    const savedForUser = localStorage.getItem(`stardesk_exams_${user.uid}`);
+    if (savedForUser) {
+      setExams(JSON.parse(savedForUser));
+    }
+
     const path = `users/${user.uid}/exams`;
     const q = query(collection(db, path), orderBy('date', 'desc'));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Exam));
       setExams(items);
+      localStorage.setItem(`stardesk_exams_${user.uid}`, JSON.stringify(items));
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, path);
+      console.warn("Firestore error loading exams in profile, using local cache", error);
+      const saved = localStorage.getItem(`stardesk_exams_${user.uid}`);
+      if (saved) setExams(JSON.parse(saved));
     });
 
     return unsubscribe;
   }, [user]);
+
+  const chartData = React.useMemo(() => {
+    return [...exams].reverse().map(e => ({
+      name: e.name,
+      percentage: e.percentage,
+    }));
+  }, [exams]);
 
   const handleSaveName = React.useCallback(() => {
     // Note: Updating displayName in Firebase Auth requires updateProfile
@@ -226,10 +242,25 @@ export default function UserProfile() {
             <p className="text-slate-400 dark:text-slate-500 text-sm italic">No exams recorded yet.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {exams.map((exam) => (
-              <HistoryItem key={exam.id} exam={exam} />
-            ))}
+          <div className="space-y-4">
+            {exams.length > 1 && (
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="name" hide />
+                    <YAxis domain={[0, 100]} hide />
+                    <Tooltip cursor={{ stroke: '#6366f1', strokeWidth: 2 }} />
+                    <Line type="monotone" dataKey="percentage" stroke="#6366f1" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {exams.map((exam) => (
+                <HistoryItem key={exam.id} exam={exam} />
+              ))}
+            </div>
           </div>
         )}
       </div>

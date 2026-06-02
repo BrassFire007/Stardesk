@@ -70,6 +70,20 @@
         "rank": { "type": "integer" }
       },
       "required": ["id", "name", "date", "marks", "totalMarks", "percentage"]
+    },
+    "TimetableEvent": {
+      "title": "TimetableEvent",
+      "description": "A user timetable event",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "dayOfWeek": { "type": "integer" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "color": { "type": "string" }
+      },
+      "required": ["id", "title", "dayOfWeek", "startTime", "endTime"]
     }
   },
   "firestore": {
@@ -80,6 +94,10 @@
     "/users/{userId}/exams/{examId}": {
       "schema": "Exam",
       "description": "User exam records"
+    },
+    "/users/{userId}/timetable/{eventId}": {
+      "schema": "TimetableEvent",
+      "description": "User timetable events"
     },
     "/groups/{groupId}": {
       "schema": "GroupChat",

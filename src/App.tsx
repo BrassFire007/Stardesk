@@ -20,10 +20,11 @@ import {
   Moon,
   Sun,
   MessageSquare,
-  LogIn
+  LogIn,
+  Calendar
 } from 'lucide-react';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
-import { auth, db, onAuthStateChanged, FirebaseUser, signInWithPopup, signInWithRedirect, getRedirectResult, googleProvider, doc, setDoc, serverTimestamp, handleFirestoreError, OperationType, signInWithCredential, GoogleAuthProvider, GOOGLE_WEB_CLIENT_ID } from './firebase';
+import { auth, db, onAuthStateChanged, FirebaseUser, signInWithPopup, signInWithRedirect, getRedirectResult, googleProvider, doc, setDoc, serverTimestamp, handleFirestoreError, OperationType, signInWithCredential, GoogleAuthProvider, GOOGLE_WEB_CLIENT_ID, onSnapshot } from './firebase';
 import { lazy, Suspense } from 'react';
 
 const HomeworkTracker = lazy(() => import('./components/HomeworkTracker'));
@@ -33,6 +34,7 @@ const UserProfile = lazy(() => import('./components/UserProfile'));
 const Chat = lazy(() => import('./components/Chat'));
 const DoubtTab = lazy(() => import('./components/DoubtTab'));
 const DeveloperOptions = lazy(() => import('./components/DeveloperOptions'));
+const Timetable = lazy(() => import('./components/Timetable'));
 import { PullToRefresh } from './components/PullToRefresh';
 import { View } from './types';
 import { QUOTES } from './constants';
@@ -53,6 +55,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [publicPostHtml, setPublicPostHtml] = useState<string | null>(null);
 
   const currentViewRef = React.useRef(currentView);
   useEffect(() => {
@@ -80,6 +83,20 @@ export default function App() {
     }
   }, [isDarkMode]);
 
+  useEffect(() => {
+    const postRef = doc(db, 'globals', 'public_post');
+    const unsubscribe = onSnapshot(postRef, (doc) => {
+      if (doc.exists()) {
+        setPublicPostHtml(doc.data().htmlLink || null);
+      } else {
+        setPublicPostHtml(null);
+      }
+    }, (error) => {
+      console.warn("Error fetching public post:", error);
+    });
+    return unsubscribe;
+  }, []);
+
   // Sync user profile to Firestore
   useEffect(() => {
     const isNative = Capacitor.isNativePlatform();
@@ -95,8 +112,8 @@ export default function App() {
       }
     }).catch((error) => {
       console.error("Redirect login error:", error);
-      // Only show error if it's not a common "no result" error
-      if (error.code !== 'auth/no-recent-redirect-any-more') {
+      // Only show error if it's not a common "no result" or network error that can be ignored on load
+      if (error.code !== 'auth/no-recent-redirect-any-more' && error.code !== 'auth/network-request-failed') {
         setLoginError(`Redirect Error: ${error.message}`);
       }
       setLoginLoading(false);
@@ -157,14 +174,18 @@ export default function App() {
       }
       
       // Fallback logic for web popups
-      if (!isNative && (err.code === 'auth/popup-blocked' || err.code === 'auth/operation-not-supported-in-this-environment' || err.message?.toLowerCase().includes('popup'))) {
+      if (!isNative && (err.code === 'auth/popup-blocked' || err.code === 'auth/operation-not-supported-in-this-environment' || err.message?.toLowerCase().includes('popup') || err.code === 'auth/network-request-failed')) {
         console.log('Popup failed, falling back to redirect...');
         setLoginError("Popup blocked. Trying redirect...");
         try {
           await signInWithRedirect(auth, googleProvider);
         } catch (redirectErr: any) {
           console.error('Redirect error:', redirectErr);
-          setLoginError(`Redirect Error: ${redirectErr.message}`);
+          if (redirectErr.code === 'auth/network-request-failed') {
+            setLoginError(`Login Error: Network or browser privacy limits. Please disable tracking protection and try again.`);
+          } else {
+            setLoginError(`Redirect Error: ${redirectErr.message}`);
+          }
           setLoginLoading(false);
         }
       } else if (err.code !== 'auth/cancelled-popup-request') {
@@ -209,6 +230,8 @@ export default function App() {
         return <UserProfile />;
       case 'chat':
         return <Chat onChatActiveChange={setIsChatActive} />;
+      case 'timetable':
+        return <Timetable />;
       case 'doubt':
         return <DoubtTab onBack={() => handleSetView('home')} onChatActiveChange={setIsChatActive} />;
       case 'developer':
@@ -265,6 +288,12 @@ export default function App() {
                 onClick={() => handleSetView('exams')}
               />
               <MobileMenuCard 
+                title="Timetable" 
+                icon={<Calendar size={28} />}
+                color="bg-white dark:bg-slate-800 text-rose-600 dark:text-rose-400"
+                onClick={() => handleSetView('timetable')}
+              />
+              <MobileMenuCard 
                 title="Doubt Solver" 
                 icon={<MessageCircleQuestion size={28} />}
                 color="bg-white dark:bg-slate-800 text-purple-600 dark:text-purple-400"
@@ -272,7 +301,13 @@ export default function App() {
               />
             </div>
             
-            <div className="hidden lg:grid grid-cols-2 gap-4">
+            {publicPostHtml && (
+              <div className="mt-4 rounded-3xl overflow-hidden shadow-lg border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 w-full" 
+                dangerouslySetInnerHTML={{ __html: publicPostHtml }} 
+              />
+            )}
+
+            <div className="hidden lg:grid grid-cols-2 gap-4 mt-4">
               <div className="bg-indigo-50 dark:bg-indigo-900/10 p-6 rounded-3xl border border-indigo-100 dark:border-indigo-800/30">
                 <h4 className="font-bold text-indigo-900 dark:text-indigo-100 mb-2">Study Tip of the Day</h4>
                 <p className="text-sm text-indigo-700 dark:text-indigo-300">Try the Feynman Technique: Explain a concept to someone else (or an imaginary friend) to truly master it.</p>

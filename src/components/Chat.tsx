@@ -19,6 +19,7 @@ interface ChatProps {
 
 export default function Chat({ onChatActiveChange }: ChatProps) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [online, setOnline] = useState(navigator.onLine);
   const [activeTab, setActiveTab] = useState<'group' | 'direct'>('group');
   const [groups, setGroups] = useState<GroupChat[]>([]);
   const [directs, setDirects] = useState<(DirectChat & { otherUser?: UserProfileData })[]>([]);
@@ -36,6 +37,17 @@ export default function Chat({ onChatActiveChange }: ChatProps) {
   const [contextMenuMessage, setContextMenuMessage] = useState<Message | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const scrollRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOnline = () => setOnline(true);
+    const handleOffline = () => setOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   useEffect(() => {
     onChatActiveChange?.(!!selectedChat);
@@ -56,9 +68,9 @@ export default function Chat({ onChatActiveChange }: ChatProps) {
     return unsubscribe;
   }, []);
 
-  // Sync User to Firestore
+  // Sync User to Firestore (with silent fail if offline)
   useEffect(() => {
-    if (!user) return;
+    if (!user || !online) return;
     const syncUser = async () => {
       try {
         const userRef = doc(db, 'users', user.uid);
@@ -77,28 +89,45 @@ export default function Chat({ onChatActiveChange }: ChatProps) {
           await updateDoc(userRef, userData);
         }
       } catch (err) {
-        handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
+        console.warn("Failed to sync user lastSeen (offline?)", err);
       }
     };
     syncUser();
-  }, [user?.uid]);
+  }, [user?.uid, online]);
 
   // Fetch Groups
   useEffect(() => {
     if (!user?.uid) return;
+    
+    // Fallback load
+    const saved = localStorage.getItem(`stardesk_groups_${user.uid}`);
+    if (saved) setGroups(JSON.parse(saved));
+
+    if (!online) return;
+
     const q = query(collection(db, 'groups'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const g = snapshot.docs
         .map(doc => ({ id: doc.id, ...doc.data() } as GroupChat))
         .filter(group => !group.deletedBy?.includes(user.uid));
       setGroups(g);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'groups'));
+      localStorage.setItem(`stardesk_groups_${user.uid}`, JSON.stringify(g));
+    }, (err) => {
+      console.warn("Firestore error groups, using local backup", err);
+    });
     return unsubscribe;
-  }, [user?.uid]);
+  }, [user?.uid, online]);
 
   // Fetch Direct Chats
   useEffect(() => {
     if (!user?.uid) return;
+    
+    // Fallback load
+    const saved = localStorage.getItem(`stardesk_directs_${user.uid}`);
+    if (saved) setDirects(JSON.parse(saved));
+
+    if (!online) return;
+
     const q = query(
       collection(db, 'direct_chats'), 
       where('participants', 'array-contains', user.uid),
@@ -111,7 +140,6 @@ export default function Chat({ onChatActiveChange }: ChatProps) {
           .map(doc => ({ id: doc.id, ...doc.data() } as DirectChat))
           .filter(chat => !chat.deletedBy?.includes(user.uid));
         
-        // Use a local variable to avoid stale closures in the async map
         const currentUserId = user.uid;
         
         const directsWithUsers = await Promise.all(d.map(async chat => {
@@ -126,20 +154,31 @@ export default function Chat({ onChatActiveChange }: ChatProps) {
           return chat;
         }));
         
-        // Only update if we are still on the same user
         if (auth.currentUser?.uid === currentUserId) {
           setDirects(directsWithUsers);
+          localStorage.setItem(`stardesk_directs_${user.uid}`, JSON.stringify(directsWithUsers));
         }
       } catch (err) {
         console.error("Error processing direct chats:", err);
       }
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'direct_chats'));
+    }, (err) => {
+      console.warn("Firestore error direct_chats, using local backup", err);
+    });
     return unsubscribe;
-  }, [user?.uid]);
+  }, [user?.uid, online]);
 
   // Fetch Messages for Selected Chat
   useEffect(() => {
     if (!selectedChat?.id || !user?.uid) return;
+    
+    const key = `stardesk_messages_${user.uid}_${selectedChat.id}`;
+    // Fallback load
+    const saved = localStorage.getItem(key);
+    if (saved) setMessages(JSON.parse(saved));
+    else setMessages([]);
+
+    if (!online) return;
+
     const path = selectedChat.type === 'group' 
       ? `groups/${selectedChat.id}/messages` 
       : `direct_chats/${selectedChat.id}/messages`;
@@ -148,9 +187,12 @@ export default function Chat({ onChatActiveChange }: ChatProps) {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const m = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
       setMessages(m);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, path));
+      localStorage.setItem(key, JSON.stringify(m));
+    }, (err) => {
+      console.warn("Firestore error messages, using local backup", err);
+    });
     return unsubscribe;
-  }, [selectedChat?.id, selectedChat?.type, user?.uid]);
+  }, [selectedChat?.id, selectedChat?.type, user?.uid, online]);
 
   const handleSendMessage = React.useCallback(async () => {
     if (!newMessage.trim() || !selectedChat || !user) return;
@@ -519,8 +561,8 @@ export default function Chat({ onChatActiveChange }: ChatProps) {
                 <div>
                   <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm">{selectedChat.name}</h3>
                   <div className="flex items-center gap-1.5 leading-none">
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Active Now</p>
+                    {online && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{online ? 'Active Now' : 'Offline'}</p>
                   </div>
                 </div>
               </div>

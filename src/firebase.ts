@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, User as FirebaseUser, signOut, setPersistence, indexedDBLocalPersistence, browserLocalPersistence, signInWithCredential } from 'firebase/auth';
-import { initializeFirestore, doc, getDoc, setDoc, collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, Timestamp, where, getDocs, updateDoc, deleteDoc, arrayUnion } from 'firebase/firestore';
+import { initializeFirestore, doc, getDoc, setDoc, collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, Timestamp, where, getDocs, updateDoc, deleteDoc, arrayUnion, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // ============================================================================
@@ -26,6 +26,7 @@ setPersistence(auth, indexedDBLocalPersistence)
 
 export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true,
+  localCache: persistentLocalCache({tabManager: persistentMultipleTabManager()})
 }, (firebaseConfig as any).firestoreDatabaseId || '(default)');
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });

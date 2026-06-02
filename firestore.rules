@@ -78,9 +78,23 @@ service cloud.firestore {
              data.percentage is number;
     }
 
+    function isValidTimetableEvent(data) {
+      return data.keys().hasAll(['title', 'dayOfWeek', 'startTime', 'endTime', 'color']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 100 &&
+             data.dayOfWeek is number && data.dayOfWeek >= 0 && data.dayOfWeek <= 6 &&
+             data.startTime is string && data.startTime.size() == 5 &&
+             data.endTime is string && data.endTime.size() == 5 &&
+             data.color is string && data.color.size() > 0 && data.color.size() < 30;
+    }
+
     // ===============================================================
     // Match Rules
     // ===============================================================
+
+    match /globals/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
 
     // User profiles
     match /users/{userId} {
@@ -98,6 +112,16 @@ service cloud.firestore {
         allow read: if isOwner(userId);
         allow create, update: if isOwner(userId) && isValidExam(request.resource.data);
         allow delete: if isOwner(userId);
+      }
+
+      match /timetable/{eventId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidTimetableEvent(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /private/{docId} {
+        allow read, write: if isOwner(userId);
       }
     }
 

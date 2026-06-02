@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Plus, X, ShieldAlert } from 'lucide-react';
+import { Plus, X, ShieldAlert, Globe, Trash2 } from 'lucide-react';
 import { 
   auth, db, onAuthStateChanged, 
-  collection, addDoc, serverTimestamp, 
+  collection, addDoc, serverTimestamp, doc, setDoc, deleteDoc,
   handleFirestoreError, OperationType, FirebaseUser
 } from '../firebase';
 
@@ -11,6 +11,8 @@ export default function DeveloperOptions() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [groupName, setGroupName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [isCreatingPost, setIsCreatingPost] = useState(false);
+  const [postHtmlLink, setPostHtmlLink] = useState('');
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -34,6 +36,35 @@ export default function DeveloperOptions() {
       console.log('Group created successfully!');
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'groups');
+    }
+  };
+
+  const createPublicPost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!postHtmlLink.trim() || !user) return;
+    try {
+      const postRef = doc(db, 'globals', 'public_post');
+      await setDoc(postRef, {
+        htmlLink: postHtmlLink,
+        updatedAt: serverTimestamp(),
+        updatedBy: user.uid
+      });
+      setPostHtmlLink('');
+      setIsCreatingPost(false);
+      console.log('Public Post created successfully!');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'globals/public_post');
+    }
+  };
+
+  const deletePublicPost = async () => {
+    if (!user) return;
+    try {
+      const postRef = doc(db, 'globals', 'public_post');
+      await deleteDoc(postRef);
+      console.log('Public Post deleted successfully!');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'globals/public_post');
     }
   };
 
@@ -88,6 +119,52 @@ export default function DeveloperOptions() {
             <span>Create New Group</span>
             <Plus size={18} />
           </button>
+        )}
+
+        {isCreatingPost ? (
+          <motion.form 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            onSubmit={createPublicPost}
+            className="p-4 bg-white dark:bg-slate-800 rounded-2xl border border-indigo-200 dark:border-indigo-900/50 space-y-3 shadow-lg"
+          >
+            <div className="flex justify-between items-center">
+              <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100">Make Public Post</h4>
+              <button type="button" onClick={() => setIsCreatingPost(false)} className="text-slate-400">
+                <X size={18} />
+              </button>
+            </div>
+            <textarea 
+              autoFocus
+              value={postHtmlLink}
+              onChange={(e) => setPostHtmlLink(e.target.value)}
+              placeholder="Enter iframe HTML code (e.g., <iframe src='...'></iframe>)"
+              className="w-full h-32 bg-slate-50 dark:bg-slate-900 border-none rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 dark:text-slate-100 font-mono"
+            />
+            <button 
+              type="submit"
+              className="w-full bg-indigo-600 text-white py-2 rounded-xl font-bold text-sm active:scale-95 transition-transform"
+            >
+              Publish Post
+            </button>
+          </motion.form>
+        ) : (
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setIsCreatingPost(true)}
+              className="flex-1 p-4 bg-white dark:bg-slate-800 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-between text-indigo-600 dark:text-indigo-400 font-bold text-sm"
+            >
+              <span>Make Public Post</span>
+              <Globe size={18} />
+            </button>
+            <button 
+              onClick={deletePublicPost}
+              className="p-4 bg-red-50 dark:bg-red-900/10 rounded-2xl border border-red-100 dark:border-red-900/30 text-red-600 dark:text-red-400"
+              title="Delete Public Post"
+            >
+              <Trash2 size={18} />
+            </button>
+          </div>
         )}
       </div>
     </div>

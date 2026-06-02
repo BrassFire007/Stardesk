@@ -24,9 +24,16 @@ export default function ExamTracker() {
   useEffect(() => {
     if (!user) {
       const saved = localStorage.getItem('stardesk_exams');
-      setExams(saved ? JSON.parse(saved) : []);
+      if (saved) setExams(JSON.parse(saved));
       setLoading(false);
       return;
+    }
+
+    // Try loading local backup immediately for instant offline access
+    const savedForUser = localStorage.getItem(`stardesk_exams_${user.uid}`);
+    if (savedForUser) {
+      setExams(JSON.parse(savedForUser));
+      setLoading(false);
     }
 
     const path = `users/${user.uid}/exams`;
@@ -35,9 +42,13 @@ export default function ExamTracker() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Exam));
       setExams(items);
+      localStorage.setItem(`stardesk_exams_${user.uid}`, JSON.stringify(items));
       setLoading(false);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, path);
+      console.warn("Firestore error, using local backup if available", error);
+      const saved = localStorage.getItem(`stardesk_exams_${user.uid}`);
+      if (saved) setExams(JSON.parse(saved));
+      setLoading(false);
     });
 
     return unsubscribe;
@@ -73,9 +84,12 @@ export default function ExamTracker() {
     }
 
     if (user) {
+      const examWithId: Exam = { ...newExam, id: crypto.randomUUID(), offline: true };
+      setExams(prev => [examWithId, ...prev]); // Optimistic update
+      
       const path = `users/${user.uid}/exams`;
       addDoc(collection(db, path), newExam).catch(err => {
-        handleFirestoreError(err, OperationType.CREATE, path);
+        console.warn("Firestore error adding exam:", err);
       });
     } else {
       const examWithId: Exam = { ...newExam, id: crypto.randomUUID() };
@@ -91,9 +105,11 @@ export default function ExamTracker() {
 
   const deleteExam = React.useCallback((id: string) => {
     if (user) {
+      setExams(prev => prev.filter(e => e.id !== id)); // Optimistic delete
+      
       const path = `users/${user.uid}/exams/${id}`;
       deleteDoc(doc(db, path)).catch(err => {
-        handleFirestoreError(err, OperationType.DELETE, path);
+        console.warn("Firestore error deleting exam:", err);
       });
     } else {
       setExams(prev => prev.filter(e => e.id !== id));

@@ -4,7 +4,8 @@ import { User as UserIcon, Camera, Trophy, Calendar, Award, LogOut, Moon, Sun, L
 import { motion, AnimatePresence } from 'motion/react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Exam } from '../types';
-import { auth, db, onAuthStateChanged, FirebaseUser, signInWithPopup, signInWithRedirect, getRedirectResult, googleProvider, signOut, collection, query, orderBy, onSnapshot, handleFirestoreError, OperationType, signInWithCredential, GoogleAuthProvider } from '../firebase';
+import { auth, db, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, googleProvider, signOut, collection, query, orderBy, onSnapshot, handleFirestoreError, OperationType, signInWithCredential, GoogleAuthProvider } from '../firebase';
+import type { FirebaseUser } from '../firebase';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 
 export default function UserProfile() {

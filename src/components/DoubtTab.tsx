@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
-import { MessageCircleQuestion, AlertCircle, Loader2, Trash2, Camera as CameraIcon, Image as ImageIcon, Key, Plus, X } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
+import { MessageCircleQuestion, AlertCircle, Loader2, Trash2, Camera as CameraIcon, Image as ImageIcon, RotateCcw } from 'lucide-react';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import MessageBar from './MessageBar';
-import { auth, db, doc, getDoc, setDoc } from '../firebase';
-import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
 interface ChatMessage {
   role: 'user' | 'model';
@@ -28,11 +28,6 @@ export default function DoubtTab({ onBack, onChatActiveChange }: DoubtTabProps) 
   const [error, setError] = useState<string | null>(null);
   const [loadingMessages, setLoadingMessages] = useState(true);
   const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
-  const [showApiKeysModal, setShowApiKeysModal] = useState(false);
-  const [apiKeys, setApiKeys] = useState<string[]>([]);
-  const [activeKeyIndex, setActiveKeyIndex] = useState<number>(0);
-  const [newKeyInput, setNewKeyInput] = useState('');
-  const [user, setUser] = useState<FirebaseUser | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -41,55 +36,23 @@ export default function DoubtTab({ onBack, onChatActiveChange }: DoubtTabProps) 
   }, [onChatActiveChange]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (u) => {
-      setUser(u);
-      let keysLoadedFromDb = false;
-      if (u) {
-        try {
-          const keysDoc = await getDoc(doc(db, `users/${u.uid}/private/apikeys`));
-          if (keysDoc.exists()) {
-            const data = keysDoc.data();
-            setApiKeys(data.keys || []);
-            setActiveKeyIndex(data.activeIndex || 0);
-            keysLoadedFromDb = true;
-          }
-        } catch (err) {
-          console.error("Failed to load API keys from db:", err);
-        }
+    try {
+      const savedDoubts = localStorage.getItem('stardesk_doubts');
+      if (savedDoubts) {
+        setMessages(JSON.parse(savedDoubts));
       }
-      if (!keysLoadedFromDb) {
-        const savedKeys = localStorage.getItem('stardesk_gemini_keys');
-        if (savedKeys) {
-          const parsed = JSON.parse(savedKeys);
-          setApiKeys(parsed.keys || []);
-          setActiveKeyIndex(parsed.activeIndex || 0);
-        }
-      }
-    });
-
-    const savedDoubts = localStorage.getItem('stardesk_doubts');
-    if (savedDoubts) {
-      setMessages(JSON.parse(savedDoubts));
+    } catch (e) {
+      console.error("Failed to load saved doubts:", e);
     }
     setLoadingMessages(false);
-    return unsubscribe;
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('stardesk_gemini_keys', JSON.stringify({ keys: apiKeys, activeIndex: activeKeyIndex }));
-    if (user) {
-      setDoc(doc(db, `users/${user.uid}/private/apikeys`), {
-        keys: apiKeys,
-        activeIndex: activeKeyIndex,
-        updatedAt: new Date().toISOString()
-      }, { merge: true }).catch(err => {
-        console.error("Failed to sync API keys to db:", err);
-      });
+    try {
+      localStorage.setItem('stardesk_doubts', JSON.stringify(messages));
+    } catch (e) {
+      console.error("Failed to save doubts:", e);
     }
-  }, [apiKeys, activeKeyIndex, user]);
-
-  useEffect(() => {
-    localStorage.setItem('stardesk_doubts', JSON.stringify(messages));
   }, [messages]);
 
   const formatTime = (timestamp?: string) => {
@@ -147,6 +110,108 @@ export default function DoubtTab({ onBack, onChatActiveChange }: DoubtTabProps) 
     }
   };
 
+  const executeStream = React.useCallback(async (historyMessages: ChatMessage[]) => {
+    setIsLoading(true);
+    setError(null);
+    let streamStarted = false;
+
+    try {
+      const contents = historyMessages.map(m => ({
+        role: m.role,
+        parts: [
+          ...(m.image ? [{ 
+            inlineData: { 
+              data: m.image.split(',')[1] || '', 
+              mimeType: (m.image.split(';')[0].split(':')[1]) || 'image/jpeg' 
+            } 
+          }] : []),
+          { text: m.content || (m.image ? "Analyze this image" : "") }
+        ]
+      }));
+
+      const response = await fetch("/api/gemini/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "gemini-3.8-flash",
+          contents,
+          config: {
+            systemInstruction: "You are Beacon AI, a helpful study assistant for Stardesk. Help students solve their doubts clearly, patiently, and concisely. Format all mathematical symbols, equations, and variables using LaTeX: enclose inline math in $...$ (e.g. $x^2 + y^2 = r^2$ or $\\frac{a}{b}$) and block math in $$...$$. Use markdown for headings, bold text, lists, and tables. If an image is provided, analyze it thoroughly to solve the student's doubt step-by-step.",
+          }
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Failed to connect to Beacon AI." }));
+        throw new Error(errorData.error || "Failed to connect to Beacon AI.");
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No response stream available.");
+
+      const decoder = new TextDecoder();
+      let fullText = "";
+      
+      // Add empty message for model to start streaming into
+      setMessages(prev => [...prev, { role: 'model', content: '', timestamp: new Date().toISOString() }]);
+      streamStarted = true;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split("\n");
+        
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const dataStr = line.slice(6).trim();
+            if (dataStr === "[DONE]") break;
+            try {
+              const data = JSON.parse(dataStr);
+              if (data.error) throw new Error(data.error);
+              if (data.text) {
+                fullText += data.text;
+                setMessages(prev => {
+                  const newMsgs = [...prev];
+                  if (newMsgs.length > 0) {
+                    newMsgs[newMsgs.length - 1] = {
+                      ...newMsgs[newMsgs.length - 1],
+                      content: fullText
+                    };
+                  }
+                  return newMsgs;
+                });
+              }
+            } catch (e: any) {
+              if (e.message && !e.message.includes("JSON")) {
+                throw e;
+              }
+            }
+          }
+        }
+      }
+
+      if (!fullText.trim()) {
+        throw new Error("No response received from Beacon AI. Please try again.");
+      }
+    } catch (err: any) {
+      console.error("AI Error:", err);
+      if (streamStarted) {
+        // Remove empty placeholder if nothing was streamed
+        setMessages(prev => {
+          if (prev.length > 0 && prev[prev.length - 1].role === 'model' && !prev[prev.length - 1].content) {
+            return prev.slice(0, -1);
+          }
+          return prev;
+        });
+      }
+      setError(err.message || "An error occurred while connecting to Beacon AI.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   const handleSubmit = React.useCallback(async () => {
     if ((!input.trim() && !selectedImage) || isLoading) return;
 
@@ -163,217 +228,36 @@ export default function DoubtTab({ onBack, onChatActiveChange }: DoubtTabProps) 
       timestamp: new Date().toISOString()
     };
 
-    setMessages(prev => [...prev, newUserMsg]);
-    setIsLoading(true);
-    setError(null);
+    const nextHistory = [...messages, newUserMsg];
+    setMessages(nextHistory);
+    await executeStream(nextHistory);
+  }, [input, selectedImage, isLoading, messages, executeStream]);
 
-    try {
-      let apiKey = apiKeys[activeKeyIndex];
-      if (!apiKey) {
-        apiKey = process.env.GEMINI_API_KEY || '';
-      }
-      if (!apiKey) {
-        setShowApiKeysModal(true);
-        setMessages(prev => prev.slice(0, -1));
-        setInput(userMessage);
-        setSelectedImage(userImage);
-        setError("Please add an API key first.");
-        setIsLoading(false);
-        return;
-      }
-
-      let text = "";
-
-      if (apiKey.startsWith('sk-or-') || apiKey.startsWith('xai-') || apiKey.startsWith('sk-') || apiKey.startsWith('gsk_')) {
-        let endpoint = 'https://api.openai.com/v1/chat/completions';
-        let model = 'gpt-4o-mini';
-        
-        if (apiKey.startsWith('sk-or-')) {
-          endpoint = 'https://openrouter.ai/api/v1/chat/completions';
-          model = 'openrouter/auto';
-        } else if (apiKey.startsWith('xai-')) {
-          endpoint = 'https://api.x.ai/v1/chat/completions';
-          model = 'grok-beta';
-        } else if (apiKey.startsWith('gsk_')) {
-          endpoint = 'https://api.groq.com/openai/v1/chat/completions';
-          model = 'llama-3.3-70b-versatile';
-        }
-
-        const openAiMessages = [
-          { role: 'system', content: "You are Beacon AI, a helpful study assistant for Stardesk. Help students solve their doubts clearly and concisely. Use markdown for formatting." },
-          ...messages.map(m => {
-            const content: any[] = [];
-            if (m.content) {
-              content.push({ type: "text", text: m.content });
-            }
-            if (m.image) {
-              content.push({ type: "image_url", image_url: { url: m.image } });
-            }
-            return { role: m.role === 'model' ? 'assistant' : 'user', content };
-          }),
-          {
-            role: 'user',
-            content: [
-              { type: "text", text: userMessage || "Analyze this image" },
-              ...(userImage ? [{ type: "image_url", image_url: { url: userImage } }] : [])
-            ]
-          }
-        ];
-
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json', 
-            'Authorization': `Bearer ${apiKey}`,
-            ...(apiKey.startsWith('sk-or-') ? {
-               'HTTP-Referer': window.location.href,
-               'X-Title': 'Beacon AI'
-            } : {})
-          },
-          body: JSON.stringify({
-            model,
-            messages: openAiMessages
-          })
-        });
-        
-        const data = await response.json();
-        if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-        text = data.choices[0].message.content;
-
-      } else if (apiKey.startsWith('sk-ant-')) {
-        const anthropicMessages = [
-          ...messages.map(m => {
-            const content: any[] = [];
-            if (m.image) {
-              const base64Data = m.image.split(',')[1];
-              const mimeType = m.image.split(';')[0].split(':')[1];
-              content.push({ type: "image", source: { type: "base64", media_type: mimeType, data: base64Data } });
-            }
-            if (m.content) {
-              content.push({ type: "text", text: m.content });
-            }
-            return { role: m.role === 'model' ? 'assistant' : 'user', content };
-          }),
-          {
-            role: 'user',
-            content: [
-              ...(userImage ? [{ type: "image", source: { type: "base64", media_type: userImage.split(';')[0].split(':')[1], data: userImage.split(',')[1] } }] : []),
-              { type: "text", text: userMessage || "Analyze this image" }
-            ]
-          }
-        ];
-        
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json', 
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-            'anthropic-dangerously-allow-browser': 'true'
-          },
-          body: JSON.stringify({
-            model: 'claude-3-haiku-20240307',
-            max_tokens: 1024,
-            system: "You are Beacon AI, a helpful study assistant. Help students solve their doubts clearly and concisely.",
-            messages: anthropicMessages
-          })
-        });
-        
-        const data = await response.json();
-        if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-        text = data.content[0].text;
-
-      } else {
-        const ai = new GoogleGenAI({ apiKey });
-        const model = "gemini-3.5-flash"; 
-        
-        const contents = [
-          ...messages.map(m => ({
-            role: m.role,
-            parts: [
-              ...(m.image ? [{ inlineData: { data: m.image.split(',')[1], mimeType: 'image/jpeg' } }] : []),
-              { text: m.content || (m.image ? "Analyze this image" : "") }
-            ]
-          })),
-          { 
-            role: 'user', 
-            parts: [
-              ...(userImage ? [{ inlineData: { data: userImage.split(',')[1], mimeType: 'image/jpeg' } }] : []),
-              { text: userMessage || "Analyze this image" }
-            ] 
-          }
-        ];
-
-        try {
-          const response = await ai.models.generateContent({
-            model,
-            contents,
-            config: {
-              systemInstruction: "You are Beacon AI, a helpful study assistant for Stardesk. Help students solve their doubts clearly and concisely. Use markdown for formatting. If an image is provided, analyze it carefully to help with the student's doubt.",
-            }
-          });
-
-          if (!response.text) {
-            throw new Error("No response from Gemini.");
-          }
-          text = response.text;
-        } catch (e: any) {
-          const stringifiedError = e instanceof Error ? e.message : String(e);
-          if (stringifiedError.includes('403') || stringifiedError.includes('PERMISSION_DENIED')) {
-             throw new Error("The default API key is restricted. Please add your own API key using the 'API Keys' menu at the top right.");
-          }
-          throw e;
-        }
-      }
-
-      if (text) {
-        const modelMsg: ChatMessage = { 
-          role: 'model', 
-          content: text,
-          timestamp: new Date().toISOString()
-        };
-        setMessages(prev => [...prev, modelMsg]);
-      }
-    } catch (err: any) {
-      console.error("AI Error:", err);
-      setError(err.message || "An error occurred while connecting to the AI.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [input, selectedImage, isLoading, messages, apiKeys, activeKeyIndex]);
+  const handleRetry = React.useCallback(async () => {
+    if (isLoading || messages.length === 0) return;
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg.role !== 'user') return;
+    await executeStream(messages);
+  }, [isLoading, messages, executeStream]);
 
   const clearChat = React.useCallback(() => {
     setMessages([]);
+    localStorage.removeItem('stardesk_doubts');
     setError(null);
   }, []);
-
-  const handleAddKey = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newKeyInput.trim()) return;
-    setApiKeys(prev => [...prev, newKeyInput.trim()]);
-    setNewKeyInput('');
-    if (apiKeys.length === 0) setActiveKeyIndex(0);
-  };
-
-  const removeKey = (index: number) => {
-    const newKeys = apiKeys.filter((_, i) => i !== index);
-    setApiKeys(newKeys);
-    if (activeKeyIndex === index) {
-      setActiveKeyIndex(Math.max(0, newKeys.length - 1));
-    } else if (activeKeyIndex > index) {
-      setActiveKeyIndex(prev => prev - 1);
-    }
-  };
 
   return (
     <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-900 relative">
       <div className="absolute top-4 right-4 z-20">
-        <button 
-          onClick={() => setShowApiKeysModal(true)} 
-          className="flex items-center gap-2 text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 rounded-full shadow-sm hover:scale-105 transition-transform"
-        >
-          <Key size={14} /> API Keys
-        </button>
+        {messages.length > 0 && (
+          <button 
+            onClick={clearChat} 
+            title="Clear chat"
+            className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm border border-slate-200 dark:border-slate-700 hover:border-rose-200 transition-colors"
+          >
+            <Trash2 size={13} /> Clear
+          </button>
+        )}
       </div>
 
       {/* Messages */}
@@ -413,7 +297,10 @@ export default function DoubtTab({ onBack, onChatActiveChange }: DoubtTabProps) 
                   />
                 )}
                 <div className={`prose prose-sm dark:prose-invert max-w-none break-words ${msg.role === 'user' ? 'text-white' : ''}`}>
-                  <ReactMarkdown>
+                  <ReactMarkdown
+                    remarkPlugins={[remarkMath]}
+                    rehypePlugins={[rehypeKatex]}
+                  >
                     {msg.content}
                   </ReactMarkdown>
                 </div>
@@ -437,80 +324,26 @@ export default function DoubtTab({ onBack, onChatActiveChange }: DoubtTabProps) 
           </motion.div>
         )}
         {error && (
-          <div className="bg-rose-50 dark:bg-rose-900/20 p-3 rounded-xl border border-rose-100 dark:border-rose-800/50 flex items-center gap-3">
-            <AlertCircle className="text-rose-500" size={16} />
-            <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">{error}</p>
+          <div className="bg-rose-50 dark:bg-rose-900/20 p-3 rounded-xl border border-rose-100 dark:border-rose-800/50 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <AlertCircle className="text-rose-500 shrink-0" size={16} />
+              <p className="text-xs text-rose-600 dark:text-rose-400 font-medium truncate">{error}</p>
+            </div>
+            {messages.length > 0 && messages[messages.length - 1].role === 'user' && !isLoading && (
+              <button
+                onClick={handleRetry}
+                className="shrink-0 flex items-center gap-1 text-xs font-bold text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 px-2.5 py-1 rounded-lg bg-rose-100/70 dark:bg-rose-900/40 transition-colors shadow-xs"
+              >
+                <RotateCcw size={12} /> Retry
+              </button>
+            )}
           </div>
         )}
       </div>
 
         {/* Input */}
       <div className="relative">
-        <AnimatePresence>
-          {showApiKeysModal && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
-              onClick={() => setShowApiKeysModal(false)}
-            >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0, y: 20 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                onClick={(e) => e.stopPropagation()}
-                className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-sm shadow-2xl p-6"
-              >
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                    <Key size={20} className="text-indigo-600" /> API Keys
-                  </h3>
-                  <button onClick={() => setShowApiKeysModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                    <X size={24} />
-                  </button>
-                </div>
-                
-                <p className="text-xs text-slate-500 mb-4">Add your API keys here (Gemini, OpenRouter, Grok, Claude, OpenAI, Groq). You can switch between them if one runs out of quota. Keys are stored locally on your device.</p>
-                
-                <div className="space-y-3 max-h-48 overflow-y-auto mb-4 p-1">
-                  {apiKeys.length === 0 ? (
-                    <div className="text-center p-4 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
-                      <p className="text-xs text-slate-400 font-medium">No keys added yet.</p>
-                    </div>
-                  ) : (
-                    apiKeys.map((key, idx) => (
-                      <div key={idx} className={`flex items-center justify-between p-3 rounded-xl border ${activeKeyIndex === idx ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-slate-200 dark:border-slate-700'}`}>
-                        <div className="flex-1 overflow-hidden" onClick={() => setActiveKeyIndex(idx)}>
-                          <p className="text-xs font-mono truncate text-slate-600 dark:text-slate-300 font-medium cursor-pointer">
-                            {key.replace(/(.{4}).*(.{4})/, '$1....$2')}
-                          </p>
-                          {activeKeyIndex === idx && <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold">Active Key</span>}
-                        </div>
-                        <button onClick={() => removeKey(idx)} className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg ml-2">
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    ))
-                  )}
-                </div>
 
-                <form onSubmit={handleAddKey} className="flex gap-2">
-                  <input
-                    type="password"
-                    value={newKeyInput}
-                    onChange={(e) => setNewKeyInput(e.target.value)}
-                    placeholder="Enter API Key"
-                    className="flex-1 bg-slate-100 dark:bg-slate-900 border-none rounded-xl p-3 text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500"
-                  />
-                  <button type="submit" className="bg-indigo-600 text-white p-3 rounded-xl active:scale-95 transition-transform flex items-center justify-center">
-                    <Plus size={20} />
-                  </button>
-                </form>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         <AnimatePresence>
           {showAttachmentOptions && (

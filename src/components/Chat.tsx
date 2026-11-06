@@ -2,13 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import { MessageSquare, Users, User, Search, ChevronRight, X, LogOut, Trash2, Edit2 } from 'lucide-react';
 import { 
   auth, db, googleProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, 
   collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, 
-  doc, setDoc, getDoc, handleFirestoreError, OperationType, FirebaseUser,
+  doc, setDoc, getDoc, handleFirestoreError, OperationType,
   where, getDocs, signOut, updateDoc, deleteDoc, arrayUnion, signInWithCredential, GoogleAuthProvider
 } from '../firebase';
+import type { FirebaseUser } from '../firebase';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { GroupChat, DirectChat, Message, UserProfileData } from '../types';
 import MessageBar from './MessageBar';
@@ -716,7 +720,10 @@ const MessageItem = React.memo(({ msg, isOwn, isSystem, onLongPress }: { msg: Me
             : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-tl-none border border-slate-100 dark:border-slate-700'
         }`}>
           <div className="prose prose-sm dark:prose-invert max-w-none break-words">
-            <ReactMarkdown>
+            <ReactMarkdown
+            remarkPlugins={[remarkMath]}
+            rehypePlugins={[rehypeKatex]}
+          >
               {msg.text}
             </ReactMarkdown>
           </div>

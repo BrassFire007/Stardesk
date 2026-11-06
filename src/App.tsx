@@ -21,20 +21,106 @@ import {
   Sun,
   MessageSquare,
   LogIn,
-  Calendar
+  Calendar,
+  PenTool
 } from 'lucide-react';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
-import { auth, db, onAuthStateChanged, FirebaseUser, signInWithPopup, signInWithRedirect, getRedirectResult, googleProvider, doc, setDoc, serverTimestamp, handleFirestoreError, OperationType, signInWithCredential, GoogleAuthProvider, GOOGLE_WEB_CLIENT_ID, onSnapshot } from './firebase';
-import { lazy, Suspense } from 'react';
+import { auth, db, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, googleProvider, doc, setDoc, serverTimestamp, handleFirestoreError, OperationType, signInWithCredential, GoogleAuthProvider, GOOGLE_WEB_CLIENT_ID, onSnapshot } from './firebase';
+import type { FirebaseUser } from './firebase';
+import { lazy, Suspense, Component, ErrorInfo, ReactNode } from 'react';
 
-const HomeworkTracker = lazy(() => import('./components/HomeworkTracker'));
-const PomodoroTimer = lazy(() => import('./components/PomodoroTimer'));
-const ExamTracker = lazy(() => import('./components/ExamTracker'));
-const UserProfile = lazy(() => import('./components/UserProfile'));
-const Chat = lazy(() => import('./components/Chat'));
-const DoubtTab = lazy(() => import('./components/DoubtTab'));
-const DeveloperOptions = lazy(() => import('./components/DeveloperOptions'));
-const Timetable = lazy(() => import('./components/Timetable'));
+// Resilient dynamic import helper with automatic retry for network glitches/deploy updates
+function lazyWithRetry<T extends React.ComponentType<any>>(
+  factory: () => Promise<{ default: T }>,
+  retriesLeft = 2,
+  interval = 1000
+): React.LazyExoticComponent<T> {
+  return lazy(() => {
+    const attempt = (retries: number): Promise<{ default: T }> => {
+      return factory().catch((error) => {
+        if (retries <= 0) {
+          throw error;
+        }
+        return new Promise<{ default: T }>((resolve) => {
+          setTimeout(() => {
+            resolve(attempt(retries - 1));
+          }, interval);
+        });
+      });
+    };
+    return attempt(retriesLeft);
+  });
+}
+
+interface ErrorBoundaryProps {
+  children: ReactNode;
+  fallbackTitle?: string;
+  onRetry?: () => void;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ComponentErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('ComponentErrorBoundary caught error:', error, errorInfo);
+  }
+
+  handleRetry = () => {
+    this.setState({ hasError: false, error: null });
+    if (this.props.onRetry) {
+      this.props.onRetry();
+    } else {
+      window.location.reload();
+    }
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 mb-4 shadow-inner">
+            <MessageSquare size={24} />
+          </div>
+          <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-2">
+            {this.props.fallbackTitle || 'Unable to load module'}
+          </h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 max-w-sm">
+            {this.state.error?.message || 'A network error occurred while loading this section.'}
+          </p>
+          <button
+            onClick={this.handleRetry}
+            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95"
+          >
+            Retry Loading
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const HomeworkTracker = lazyWithRetry(() => import('./components/HomeworkTracker'));
+const PomodoroTimer = lazyWithRetry(() => import('./components/PomodoroTimer'));
+const ExamTracker = lazyWithRetry(() => import('./components/ExamTracker'));
+const UserProfile = lazyWithRetry(() => import('./components/UserProfile'));
+const Chat = lazyWithRetry(() => import('./components/Chat'));
+const DoubtTab = lazyWithRetry(() => import('./components/DoubtTab'));
+const DeveloperOptions = lazyWithRetry(() => import('./components/DeveloperOptions'));
+const Timetable = lazyWithRetry(() => import('./components/Timetable'));
+const WhiteboardTab = lazyWithRetry(() => import('./components/WhiteboardTab'));
 import { PullToRefresh } from './components/PullToRefresh';
 import { View } from './types';
 import { QUOTES } from './constants';
@@ -236,6 +322,8 @@ export default function App() {
         return <DoubtTab onBack={() => handleSetView('home')} onChatActiveChange={setIsChatActive} />;
       case 'developer':
         return <DeveloperOptions />;
+      case 'whiteboard':
+        return <WhiteboardTab onBack={() => handleSetView('home')} />;
       default:
         const userName = user?.displayName || localStorage.getItem('stardesk_user_name') || 'Student';
         return (
@@ -299,6 +387,12 @@ export default function App() {
                 color="bg-white dark:bg-slate-800 text-purple-600 dark:text-purple-400"
                 onClick={() => handleSetView('doubt')}
               />
+              <MobileMenuCard 
+                title="Whiteboard" 
+                icon={<PenTool size={28} />}
+                color="bg-white dark:bg-slate-800 text-teal-600 dark:text-teal-400"
+                onClick={() => handleSetView('whiteboard')}
+              />
             </div>
             
             {publicPostHtml && (
@@ -329,7 +423,7 @@ export default function App() {
   return (
     <div className="flex justify-center bg-slate-200 min-h-screen transition-colors duration-300">
       {/* Main App Container */}
-      <div className={`w-full max-w-7xl mx-auto bg-[#F8F9FC] dark:bg-slate-900 h-screen max-h-screen flex flex-col shadow-2xl relative overflow-hidden transition-colors duration-300 pt-[env(safe-area-inset-top,0px)] ${isDarkMode ? 'dark' : ''}`}>
+      <div className={`w-full max-w-7xl mx-auto bg-[#F8F9FC] dark:bg-slate-900 h-[100dvh] max-h-[100dvh] flex flex-col shadow-2xl relative overflow-hidden transition-colors duration-300 pt-[env(safe-area-inset-top,0px)] ${isDarkMode ? 'dark' : ''}`}>
         
         {/* Quote Bottom Sheet */}
         <AnimatePresence>
@@ -380,72 +474,74 @@ export default function App() {
         </AnimatePresence>
 
         {/* Header */}
-        <header className="bg-white dark:bg-slate-800 px-6 py-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-700 transition-colors">
-          <div className="flex items-center gap-3">
-            {currentView !== 'home' && (
-              <motion.button
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                whileTap={{ scale: 0.9 }}
-                onClick={() => handleSetView('home')}
-                className="p-2 -ml-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors"
-              >
-                <ChevronLeft size={24} />
-              </motion.button>
-            )}
-            <div 
-              className="flex items-center gap-2 cursor-pointer active:opacity-70 transition-opacity"
-              onClick={() => {
-                handleSetView('home');
-                if (currentView === 'home') setShowQuote(true);
-              }}
-            >
-              <div className="bg-indigo-600 p-1.5 rounded-xl text-white">
-                <GraduationCap size={20} />
-              </div>
-              <h1 className="text-lg font-extrabold tracking-tight text-slate-800 dark:text-slate-100">
-                stardesk
-              </h1>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <motion.button 
-              whileTap={{ scale: 0.9 }}
-              onClick={toggleTheme}
-              className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors relative w-10 h-10 flex items-center justify-center"
-            >
-              <AnimatePresence mode="wait" initial={false}>
-                <motion.div
-                  key={isDarkMode ? 'dark' : 'light'}
-                  initial={{ y: -20, opacity: 0, rotate: -90 }}
-                  animate={{ y: 0, opacity: 1, rotate: 0 }}
-                  exit={{ y: 20, opacity: 0, rotate: 90 }}
-                  transition={{ duration: 0.2 }}
+        {currentView !== 'whiteboard' && (
+          <header className="bg-white dark:bg-slate-800 px-6 py-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-700 transition-colors">
+            <div className="flex items-center gap-3">
+              {currentView !== 'home' && (
+                <motion.button
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => handleSetView('home')}
+                  className="p-2 -ml-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors"
                 >
-                  {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-                </motion.div>
-              </AnimatePresence>
-            </motion.button>
-            <button 
-              onClick={() => {
-                const newCount = devClickCount + 1;
-                if (newCount >= 7) {
-                  handleSetView('developer');
-                  setDevClickCount(0);
-                } else {
-                  setDevClickCount(newCount);
-                }
-              }}
-              className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400"
-            >
-              <Sparkles size={20} />
-            </button>
-          </div>
-        </header>
+                  <ChevronLeft size={24} />
+                </motion.button>
+              )}
+              <div 
+                className="flex items-center gap-2 cursor-pointer active:opacity-70 transition-opacity"
+                onClick={() => {
+                  handleSetView('home');
+                  if (currentView === 'home') setShowQuote(true);
+                }}
+              >
+                <div className="bg-indigo-600 p-1.5 rounded-xl text-white">
+                  <GraduationCap size={20} />
+                </div>
+                <h1 className="text-lg font-extrabold tracking-tight text-slate-800 dark:text-slate-100">
+                  stardesk
+                </h1>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <motion.button 
+                whileTap={{ scale: 0.9 }}
+                onClick={toggleTheme}
+                className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors relative w-10 h-10 flex items-center justify-center"
+              >
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.div
+                    key={isDarkMode ? 'dark' : 'light'}
+                    initial={{ y: -20, opacity: 0, rotate: -90 }}
+                    animate={{ y: 0, opacity: 1, rotate: 0 }}
+                    exit={{ y: 20, opacity: 0, rotate: 90 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+                  </motion.div>
+                </AnimatePresence>
+              </motion.button>
+              <button 
+                onClick={() => {
+                  const newCount = devClickCount + 1;
+                  if (newCount >= 7) {
+                    handleSetView('developer');
+                    setDevClickCount(0);
+                  } else {
+                    setDevClickCount(newCount);
+                  }
+                }}
+                className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400"
+              >
+                <Sparkles size={20} />
+              </button>
+            </div>
+          </header>
+        )}
 
         {/* Main Content Area */}
         <main className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
-          <PullToRefresh onRefresh={handleRefresh} disabled={isChatActive}>
+          <PullToRefresh onRefresh={handleRefresh} disabled={isChatActive || currentView === 'whiteboard'}>
             <AnimatePresence mode="wait">
               <motion.div
                 key={currentView}
@@ -453,10 +549,10 @@ export default function App() {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -15 }}
                 transition={{ type: "spring", bounce: 0, duration: 0.35 }}
-                style={{ willChange: "transform, opacity" }}
-                className="flex-1 flex flex-col min-h-0"
+                style={{ willChange: currentView === 'whiteboard' ? "auto" : "transform, opacity" }}
+                className={currentView === 'whiteboard' ? "absolute inset-0 z-50 flex flex-col" : "flex-1 flex flex-col min-h-0"}
               >
-                {!isChatActive && (
+                {!isChatActive && currentView !== 'whiteboard' && (
                   <div className="px-6 pt-4 flex items-center justify-between">
                     <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 capitalize">
                       {currentView === 'home' ? 'Dashboard' : currentView}
@@ -475,20 +571,22 @@ export default function App() {
                     )}
                   </div>
                 )}
-                <Suspense fallback={
-                  <div className="flex-1 flex items-center justify-center p-8">
-                    <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin flex-shrink-0"></div>
-                  </div>
-                }>
-                  {renderedView}
-                </Suspense>
+                <ComponentErrorBoundary fallbackTitle="Unable to load view" onRetry={() => handleSetView(currentView)}>
+                  <Suspense fallback={
+                    <div className="flex-1 flex items-center justify-center p-8">
+                      <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin flex-shrink-0"></div>
+                    </div>
+                  }>
+                    {renderedView}
+                  </Suspense>
+                </ComponentErrorBoundary>
               </motion.div>
             </AnimatePresence>
           </PullToRefresh>
         </main>
 
         {/* Bottom Navigation Bar */}
-        {!isChatActive && (currentView as any) !== 'doubt' && (
+        {!isChatActive && (currentView as any) !== 'doubt' && currentView !== 'whiteboard' && (
           <nav className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-lg border-t border-slate-100 dark:border-slate-700 z-40 transition-colors">
             <div className="max-w-md mx-auto px-6 py-3 pb-[calc(12px+env(safe-area-inset-bottom,0px))] flex justify-between items-center font-sans">
               <NavButton 
